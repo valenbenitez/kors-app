@@ -1,0 +1,6 @@
+allowBuilds:
+  puppeteer: true
+  sharp: true
+ignoredBuiltDependencies:
+  - sharp
+  - unrs-resolver

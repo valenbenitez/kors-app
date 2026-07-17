@@ -1,0 +1,83 @@
+﻿Nro. Cotización,Auditoría,Costo Neto USD,Destino,Estado,Fecha Confirmación,Fecha Cotización,Fecha Envío,Lead,Margen USD,Margen Vendedor USD,Método de Pago,Notas,PAX Adultos,PAX Niños,PDF Cliente,PDF Ops,Perfil,Precio Final USD,Precio/Adulto,Precio/Niño,PremiumTag,Redondeo USD,TC ARS/USD,WhatsApp
+COT-0002,https://app.notion.com/p/387d7e4f683b81cda50ee6f54a3156fd,$600.77,Iguazú,enviada,,"June 22, 2026","June 22, 2026",Kelly Patricia,$323.49,,tarjeta,"Kelly Patricia (Colombia), primer viaje a Argentina. 1 pax sola, 14-16 ago 2026 Iguaú.
+Equipaje: carry-on 10 kg (JetSMART Economy básico — sin valija despachada).
+Vuelos AEP-IGR JetSMART (ARS 295.381) + Hotel Amérian Portal del Iguazú 5★ (ARS 351.302 NETO = 399.207 retail - 47.905 ajuste) + PQT 05 + Gran Aventura TITO Full Day.
+Foco: cataratas (Arg + Bras + lancha bajo cataratas), primer viaje, paquete cerrado. Sin tag premium.
+Datos crudos: Datos Crudos + Transcript — COT-0002 (https://app.notion.com/p/Datos-Crudos-Transcript-COT-0002-387d7e4f683b816491aacf44321a2679?pvs=21)",1,0,https://drive.google.com/open?id=1vV-Ck6EbmdOobNkOexEb2eohEloOJnMC,,Primer viaje,"$1,026.96","$1,026.96",$0.00,No,,1420,+573135668785
+COT-0003,https://app.notion.com/p/387d7e4f683b81ad9f8ec12ee3a4ea1d,$836.74,Iguazú,enviada,,"June 22, 2026","June 22, 2026",Gabriela,$450.55,,tarjeta,"Gabriela (Perú +51), primer viaje a Argentina. 1 pax sola, 15-18 oct 2026 Iguazú (3 noches).
+Equipaje: valija 15 kg despachada + carry-on (Aerolíneas Argentinas Economy K).
+Vuelos AEP-IGR AR1772/AR1787 (ARS 485.290) + Hotel Village Cataratas 4★ sin ajuste (ARS 482.418 NETO) + PQT 05 (Cat Arg + Bras + transfers) + Gran Aventura TITO Full Day.
+Foco: cataratas + lancha bajo cataratas, paquete cerrado. Sin tag premium.
+Auditoría: ver subpage.",1,0,https://drive.google.com/open?id=1DNjx5RORPlwh7w18BQDQKawt0UY4lftf,,Primer viaje,"$1,430.32","$1,430.32",$0.00,No,,1420,+51920711221
+COT-0004,https://app.notion.com/p/388d7e4f683b815da7b7fc20fb45579e,$913.79,Bariloche,enviada,,"June 23, 2026","June 23, 2026",Victorius,$492.04,,tarjeta,"Victorius (Colombia +57), pareja. 2 pax, 01-04 nov 2026 Bariloche (3 noches).
+Equipaje: valija 15 kg despachada + carry-on (Aerolíneas Argentinas Economy).
+Vuelos EZE/AEP-BRC Aerolíneas Argentinas (ARS 463.015 c/tasas) + Hotel Nevada 3★ sin ajuste (ARS 327.855 NETO twin) + Circuito Chico + Isla Victoria + Cerro Tronador.
+Foco: pareja primavera, paquete clásico panorámico + romantico (navegación Isla Victoria). Sin tag premium.
+Auditoría: ver subpage.",2,0,https://drive.google.com/open?id=1rxHMu_jet5ISDADc_T7_itsJnMEeUf-o,,Pareja,"$1,561.81",$780.90,$0.00,No,,1420,+573006763365
+COT-0005,https://app.notion.com/p/389d7e4f683b81bdb61bf695c2a058a0,"$2,918.26",Bariloche,enviada,,"June 24, 2026","June 24, 2026",Caro,"$1,626.09",,tarjeta,"Caro (Colombia +57), familia 2 adultos + 1 niño 6 años. 12-16 ago 2026 Bariloche invierno (4 noches).
+Equipaje: carry-on 10 kg JetSMART Economy BASIC (sin valija despachada).
+Vuelos SCL-AEP-BRC con conexión (JA 3881 + JA 3045 ida; JA 3046 vuelta) JetSMART (ARS 1.666.458 c/tasas 3 pax 2 tramos) + Hotel Nevada 3★ Superior Departamento sin ajuste (ARS 1.832.165 NETO 4 noches familiar) + Premium familia opción 2: Circuito Chico + Isla Victoria + Tronador (ARS 645.300 c/tarifa menor diferenciada Isla Victoria).
+Foco: familia invierno con niño 6 años. Pág 2 PDF upsell snow experiences: Can-Am Defender (+3 años, apto niño) + Bautismo Ski Winter Park + Combo Moto Nieve. Tag premium ✅ (total ≥USD 3000).
+Cliente pidió DOS cotizaciones: con vuelos (esta) + sin vuelos (pendiente recotización SIN vuelos).
+Generado con Playwright + Chromium standalone (migración desde Chrome headless, este COT fue el caso que motivó el cambio).
+Auditoría: ver subpage.",2,1,https://drive.google.com/open?id=1C2NnB-jrouy1VzDWPo3g1uESPca-4uG8,,Familia con niños,"$5,162.27","$1,720.76","$1,720.76",Yes,,1420,+573005699545
+COT-0006,https://app.notion.com/p/389d7e4f683b81759b4fcad0fabe4e03,"$4,087.88",Calafate + Ushuaia + Iguazú,enviada,,"June 24, 2026","June 24, 2026",Nina Guerrero,"$2,276.15",,tarjeta,"Nina Guerrero (Ecuador +593), primer viaje a Argentina. 2 pax, multi-destino 03-11 nov 2026 (Calafate 3n + Ushuaia 2n + Iguazú 3n = 8 noches).
+Equipaje: 1 valija 15 kg + carry-on c/pax (Aerolíneas Argentinas Economy).
+Vuelos internos AR (EZE-FTE AR1838 + FTE-USH AR1898 + USH-IGR via AEP AR1873+1792 + IGR-AEP AR1779) ARS 2.871.624 total 2 pax. Cliente trae propios los internacionales Ecuador↔BUE (oct 31 / nov 13).
+Hoteles: Bahía Redonda 3★ Calafate ARS 646.154 Standard americana + Hotel Las Lengas 3★ Ushuaia ARS 441.026 + Raíces Esturión 4★ Puerto Iguazú ARS 419.436. Todos con desayuno.
+7 excursiones premium primer-viaje: Pasarelas Perito Moreno privado 4pax + El Chaltén almuerzo + Navegación Pinguínera + Lagos Escondidos+Fagnano + PQT 01A Cat Argentinas + Cat Brasileras+Aves + Gran Aventura lancha.
+Foco: íconos clásicos de Argentina (Glaciar + Fin del Mundo + Cataratas) para primer viaje. Tag premium ✅ (total ≥USD 3000).
+⚠ GAP catalog Ushuaia: PN Tierra del Fuego + Beagle simple vencen 30/09/26 — tarifa verano nov pendiente cargar en DB. Usamos las 2 vigentes (Pinguínera + Lagos Escondidos).
+⚠ Multi-destino: PDF custom (3 págs) generado fuera del template estándar v2.4 ya que el template asume 1 solo destino. Estructura: P1 vuelos+hoteles+precio, P2 itinerario+excursiones por destino, P3 tips+mapas+contacto.
+Generado con Playwright + Chromium standalone (~2s).
+Auditoría: ver subpage.",2,0,https://drive.google.com/open?id=1tyFIHmWFbM22OqABGHgTT5XrHLdKYtS2,,Primer viaje,"$7,225.87","$3,612.94",$0.00,Yes,,1420,+593984854842
+COT-0007,https://app.notion.com/p/389d7e4f683b8189a37cda0f88222472,"$3,553.49",Calafate + Ushuaia + Buenos Aires + Iguazú,enviada,,"June 24, 2026","June 24, 2026",Nina Guerrero,"$1,567.80",$302.56,tarjeta,"Nina Guerrero (Ecuador +593), primer viaje. 2 pax, multi-destino 03-13 nov 2026 (Calafate 3n + Ushuaia 3n + BUE 1n conectora + Iguazú 2n = 9 noches).
+Equipaje: solo carry-on 10kg (AR EP + JetSMART LIGHT BASIC, sin valija despachada).
+Vuelos: AR (EZE-FTE-USH-EZE) ARS 1.346.459 + JetSMART (EZE-IGR-AEP) ARS 476.434 = ARS 1.822.893 total 2 pax.
+Hoteles: Don Pepe 3★ Calafate ARS 414.261 + Mil 810 3★ Ushuaia ARS 440.657 + CasaCalma 4★ BUE ARS 301.852 (noche conectora) + Amérian Portal 5★ Iguazú ARS 549.143.
+12 servicios incluidos: Calafate(Transfer+Perito Moreno+Safari Náutico+Chaltén) + Ushuaia(Transfer+PN TDF+Tren Fin del Mundo+Canal Beagle) + BUE(Transfer privado EZE) + Iguazú(PQT 01A Cat Arg+Cat Brasil+Aves). + CORTESÍA: Cena Show Madero Tango Ejecutiva (FREE).
+Fórmula v2.8 aplicada: margen agencia 30% + fee tarjeta ×1,10 + margen vendedor 5% (USD 306,47) + CEILING_v1. PRIMERA cotización con la nueva regla.
+⚠ Gap catalog: Iguazú PQT 01A + Cat Brasileras NETOs vencen 30/06/26. Ushuaia Canal Beagle NETO vence 30/09/26. Operador asume riesgo (no actualizado el tarifario nov 2026 todavía).
+⚠ Transfer privado BUE no estaba en DB Excursiones (NETO ARS 80.000/tramo por vehículo). Pendiente agregar a DB.
+Generado con Playwright + Chromium standalone (~2s). Template Multi v1.0 (5 págs por contenido denso).
+Auditoría: ver subpage.",2,0,https://drive.google.com/open?id=12qnFkyMkm4aJFFc3TEtFRgxWdwYoLaWK,,Primer viaje,"$6,052.00","$3,026.00",$0.00,Yes,CEILING_v1,1420,+593984854842
+COT-0008,https://app.notion.com/p/38bd7e4f683b812cafefc87fe75e66e7,"$1,318.43",Bariloche,enviada,,"June 26, 2026","June 26, 2026",Fernanda Encampira,$565.04,$109.04,tarjeta,"Fernanda Encampira (México +52), Pareja primer viaje a Argentina. 2 pax, Bariloche 14-17 ago 2026 (3 noches invierno · temporada ski).
+Equipaje: NO incluye (tarifa Promo AR Economy U/H — cliente compra add-on aerolínea).
+Vuelos AR cabotaje AEP↔BRC USD 403 total 2 pax (ARS 572.260) — IDA AR 1670 Vie 14 + VUELTA AR 1679 Lun 17 Boeing 737.
+Hotel Concorde Hotel Bariloche 3★ centro (Libertad 131) ARS 773.663 (3 noches doble · cofre seg, minibar, calefacción, bar, wifi).
+3 excursiones BARILOCHE TRAVEL (ARS 472.200 total): Circuito Chico + Isla Victoria + Cerro Tronador.
+⚠ NO INCLUYE traslado aeropuerto-hotel (operador cotiza privado aparte ~USD 25-35).
+Fórmula v2.8 aplicada: margen agencia 30% + fee tarjeta ×1,10 + margen vendedor 5% (USD 109,04) + CEILING_v1.
+⚠ Pág 2 PDF sale con 2 cards upsell (Pase Ski Catedral + Catedral base) en vez de 3 — catálogo Bariloche limitado para no-incluidas.
+⚠ Traslado AEP-LlaoLlao km24 DB Notion vence 30/06/2026 — no aplica al Concorde centro pero documentado.
+Generado con Playwright + Chromium standalone (~3s). Template single v2.6 (3 págs).
+Auditoría: ver subpage.",2,0,https://drive.google.com/open?id=169PsnOJBCfLszgoFrGDS8PusmtzmNV8L,,Pareja,"$2,181.00","$1,091.00",$0.00,No,CEILING_v1,1420,+5215541889591
+COT-0009,https://app.notion.com/p/38cd7e4f683b81f1bf5bdf993154a1aa,"$21,866.67",Buenos Aires + Ushuaia + Calafate + Bariloche,enviada,,"June 27, 2026","June 27, 2026",Grupo 12 personas,"$9,371.43","$1,808.52",tarjeta,"Grupo 12 personas, sin nombre específico (a completar). Multi-destino Argentina 10-20 nov 2026 (10 noches primavera).
+4 destinos: Buenos Aires (3n) + Ushuaia (3n) + Calafate (2n) + Bariloche (2n).
+Vuelos AR cabotaje 3 tramos por pax (AEP-USH + USH-FTE + FTE-BRC): ARS 1.363.555/pax × 12 pax = ARS 16.362.660.
+Hoteles AMICHI 3 destinos (BUE Duomi 4★ + USH Los Yámanas 3★ + FTE Bahía Redonda 3★): ⚠ BRC SIN HOTEL (cliente resuelve).
+9 servicios incluidos: BUE (city tour privado + Madero Tango + Colonia) + USH (PQT TdF) + FTE (PQT Perito Moreno + Safari Lacustre) + BRC (Circuito Chico + 7 Lagos).
+⚠ NO INCLUYE: alojamiento Bariloche (2 noches 18-20/11) + cruce andino BRC → Pto Varas Chile (operador externo) + vuelos internacionales.
+Equipaje: 1 valija 15 kg + carry-on (AR Economy).
+Fórmula v2.8: margen agencia 30% + fee tarjeta ×1,10 + margen vendedor 5% (USD 1.808,52) + CEILING_v1.
+✅ PREMIUM: total USD 36.171 >> USD 3.000.
+Duda resuelta: PN TdF 81.100 ARS = desglose del PQT USHP01 (NO se sumó).
+City tour BUE es total 304.000 ARS (prorrateado a 25.333/pax).
+Generado con Playwright + Chromium standalone (\~3s). Template Multi v1.2 (3 págs).
+PDF 1.3 MB con 4 mapas Bariloche/Calafate/Ushuaia/BUE (URLs thumbnail v2 vigentes).",12,0,https://drive.google.com/open?id=1u4KWP2tPPn8nKencrtftQA7lB3pLNsf7,,Grupo adultos,"$36,171.00","$3,015.00",$0.00,Yes,CEILING_v1,1420,
+COT-0010,https://app.notion.com/p/38cd7e4f683b8148866fcaa0bbce79c9,"$3,212.17",Iguazú,enviada,,"June 27, 2026","June 27, 2026",Krystel,"$1,376.64",$265.67,tarjeta,"Krystel (Perú +51 999 958 694), familia 5 ad + 2 niños (6 y 7 años). Primer viaje a Argentina. Iguazú 28-31 Jul 2026 (fiestas patrias Perú · 3 noches).
+⚠ VERSIÓN v4 (recotizado 2026-06-27 PM · clean):
+Madero NO cotiza LATAM internacional ni hotel BUE (decisión operador) · cliente gestiona vuelos LIM↔BUE y eventuales transfers/hoteles BUE por su cuenta.
+Madero cotiza SOLO: JetSMART EZE-IGR-EZE + Yvy Hotel de Selva 4★ Iguazú + 2 excursiones.
+Vuelos JetSMART (USD 1.637,30 total): IDA JS 3150 EZE-IGR Mar 28 Jul 20:58-22:52 A321 Economy J · VUELTA JS 3151 IGR-EZE Vie 31 Jul 08:54-10:54 A320 Economy Q. Tarifa USD 233,90/pax igual ad/ch.
+Hotel: Yvy Hotel de Selva 4★ (AMICHI, Puerto Iguazú a 2.32 km centro, 2 hab Twin Estándar) · 3 noches con desayuno · ARS 1.277.794 total estadía (post -31% desc).
+Excursiones (ARS 796.600 total): PQT 01A Trf+Cat ARG (7 × 48.200) + Cat BRA+Aves (7 × 65.600 · vigencia jul-dic 2026 CARACOL). ⚠ NIÑOS 6-7 AÑOS PAGAN TARIFA COMPLETA (política menores 'Mismo adulto' en DB Excursiones · 'a partir de 04 años abona tarifa normal').
+Equipaje: JetSMART solo carry-on (Economy J/Q sin valija despachada · cliente compra add-on opcional).
+Fórmula v2.8: margen 30% + fee tarjeta ×1,10 + vendedor 5% (USD 265,67) + CEILING_v1.
+✅ PREMIUM: USD 5.314 > USD 3.000.
+Histórico versiones:
+  v1 (con LATAM + Complejo Americano + BUE transit + niños 50%): USD 16.822 · USD 2.404/pax
+  v2 (sin LATAM + Complejo Americano + BUE + niños 50%): USD 7.941 · USD 1.135/pax  
+  v3 (sin LATAM + Yvy 4★ + BUE + niños 50%): USD 5.463 · USD 781/pax
+  v4 (sin LATAM + Yvy 4★ + SIN BUE + niños tarifa COMPLETA): USD 5.314 · USD 760/pax ← ACTUAL
+Generado Playwright (~3s) · single template v2.6 · PDF 1.0 MB · Drive URL sin cambio (sobrescrito).",5,2,https://drive.google.com/open?id=1a3yqjw-xHs6t5jVZ8PzK_7gt67JXMfhd,,Familia con niños,"$5,314.00",$760.00,$760.00,Yes,CEILING_v1,1420,+51999958694
