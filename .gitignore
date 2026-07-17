@@ -12,6 +12,9 @@
 
 # testing
 /coverage
+src/lib/pdf/__snapshots__/**/actual-*.png
+src/lib/pdf/__snapshots__/**/diff-*.png
+docs/mvp/generated-COT-0010_cliente.pdf
 
 # next.js
 /.next/

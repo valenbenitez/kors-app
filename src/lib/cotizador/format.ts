@@ -63,4 +63,51 @@ export const CONTACT = {
   whatsapp: "+54 9 11 4444-1111",
   email: "contacto@maderoviagens.com",
   brand: "Madero Viagens",
+  evt: "14971",
+  city: "Buenos Aires, Argentina",
 } as const;
+
+/** Multiplicador de fee mostrado en el PDF cliente (no es el desglose interno). */
+export function feeMultiplierLabel(
+  method: "tarjeta" | "beetransfer" | "efectivo",
+): string {
+  switch (method) {
+    case "tarjeta":
+      return "×1,10";
+    case "beetransfer":
+      return "×1,03";
+    case "efectivo":
+      return "×1,00";
+  }
+}
+
+export function paymentFooterLine(
+  method: "tarjeta" | "beetransfer" | "efectivo",
+): string {
+  switch (method) {
+    case "tarjeta":
+      return "Forma de pago: Tarjeta internacional de crédito · surcharge 10% incluido en el precio final";
+    case "beetransfer":
+      return "Forma de pago: Transferencia via BeeTransfer · fee 3% incluido en el precio final";
+    case "efectivo":
+      return "Forma de pago: Pago en efectivo · sin surcharge";
+  }
+}
+
+export function weekdayLongEs(iso: string): string {
+  const raw = new Intl.DateTimeFormat("es-AR", { weekday: "long" }).format(
+    new Date(`${iso}T12:00:00`),
+  );
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
+}
+
+export function formatDateShortMonth(iso: string): string {
+  const d = new Date(`${iso}T12:00:00`);
+  const day = d.getDate();
+  const month = new Intl.DateTimeFormat("es-AR", { month: "short" })
+    .format(d)
+    .replace(".", "");
+  const year = d.getFullYear();
+  const monthCap = month.charAt(0).toUpperCase() + month.slice(1);
+  return `${day} ${monthCap} ${year}`;
+}

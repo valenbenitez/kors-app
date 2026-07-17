@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { formToFormulaInput } from "@/lib/cotizador/build-input";
 import { calcularCotizacion, FormulaError } from "@/lib/cotizador/formula";
+import { clientPdfFilename, generateCotNumber } from "@/lib/pdf/cot-number";
 import { htmlToPdf } from "@/lib/pdf/generate";
 import { renderPdfHtml } from "@/lib/pdf/template";
 import { cotizacionFormSchema } from "@/lib/validations/cotizacion";
@@ -40,7 +41,8 @@ export async function POST(request: Request) {
     const formulaInput = formToFormulaInput(parsed.data);
     const result = calcularCotizacion(formulaInput);
     const generatedAt = new Date().toISOString().slice(0, 10);
-    const cotNumber = `COT-MVP-${Date.now().toString().slice(-6)}`;
+    const cotNumber = generateCotNumber();
+    const filename = clientPdfFilename(cotNumber);
 
     const html = renderPdfHtml({
       cotNumber,
@@ -50,11 +52,6 @@ export async function POST(request: Request) {
     });
 
     const pdf = await htmlToPdf(html);
-    const filename = `${cotNumber}_${parsed.data.clienteNombre
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/gi, "-")
-      .replace(/^-|-$/g, "")
-      .slice(0, 40)}.pdf`;
 
     return new NextResponse(new Uint8Array(pdf), {
       status: 200,

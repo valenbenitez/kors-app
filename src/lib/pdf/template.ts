@@ -1,23 +1,43 @@
+import { getPdfCopy } from "@/data/pdf-copy";
 import { catalog } from "@/lib/cotizador/catalog";
 import {
   addDaysIso,
   CONTACT,
+  feeMultiplierLabel,
   formatDateEs,
-  formatDateShort,
+  formatDateShortMonth,
   IATA_BY_DESTINO,
   nightsLabel,
   ORIGIN_IATA,
-  paymentMethodDesc,
+  paymentFooterLine,
   VALIDEZ_COTIZACION_DIAS,
+  weekdayLongEs,
 } from "@/lib/cotizador/format";
 import type { FormulaResult } from "@/lib/cotizador/formula";
+import { getLogoDataUrl } from "@/lib/pdf/logo";
 import type { CotizacionFormInput } from "@/lib/validations/cotizacion";
+
+export type PdfTag = {
+  emoji: string;
+  label: string;
+  accent?: boolean;
+};
 
 export type PdfRenderData = {
   cotNumber: string;
   form: CotizacionFormInput;
   result: FormulaResult;
   generatedAt: string;
+  /** Override para fixture visual; default = generatedAt + VALIDEZ_COTIZACION_DIAS */
+  validUntil?: string;
+  includes?: string[];
+  excludes?: string[];
+  hotelHighlights?: string[];
+  tags?: PdfTag[];
+  locationLabel?: string;
+  guideSubtitle?: string;
+  /** Precios USD/pax forzados por id de excursión (fixture) */
+  experiencePricesUsd?: Record<string, number>;
 };
 
 function escapeHtml(value: string): string {
@@ -41,25 +61,25 @@ function money(n: number): string {
   }).format(n);
 }
 
-function moneyDec(n: number): string {
-  return new Intl.NumberFormat("es-AR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(n);
+function firstName(full: string): string {
+  return full.split(/\s+/)[0] || full;
 }
 
-function itineraryHtml(text: string): string {
-  return text
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => {
-      const match = line.match(/^(Día \d+):\s*(.*)$/i);
-      if (!match) {
-        return `<div class="day"><div class="day-content">${escapeHtml(line)}</div></div>`;
-      }
-      return `<div class="day"><div class="day-num">${escapeHtml(match[1])}</div><div class="day-content">${escapeHtml(match[2])}</div></div>`;
-    })
-    .join("");
+function displayExcursionName(raw: string): string {
+  if (/^PQT\s*01A/i.test(raw)) {
+    return "PQT 01A · Transfer in/out + Cataratas Argentinas";
+  }
+  if (/CAT\s*BRASILERAS|PARQUE\s*DE\s*AVES/i.test(raw)) {
+    return "Cataratas Brasileras + Parque de las Aves";
+  }
+  if (/GRAN\s*AVENTURA/i.test(raw)) {
+    return "Gran Aventura — paseo en lancha bajo cataratas";
+  }
+  return raw
+    .replace(/\s*\((REGULAR|PRIVADO)\)\s*$/i, "")
+    .replace(/^EXCURSION\s+/i, "")
+    .replace(/^EXC\s+/i, "")
+    .trim();
 }
 
 function includesList(form: CotizacionFormInput): string[] {
@@ -78,346 +98,851 @@ function includesList(form: CotizacionFormInput): string[] {
     const airline = form.aerolinea?.trim() || "Aerolínea a confirmar";
     const iata = IATA_BY_DESTINO[dest.destino] ?? "???";
     items.push(
-      `Vuelos ${airline} ${ORIGIN_IATA}-${iata}-${ORIGIN_IATA} (ida + vuelta)`,
+      `2 vuelos ${airline} cabotaje ${ORIGIN_IATA === "AEP" ? "EZE" : ORIGIN_IATA}-${iata}-${ORIGIN_IATA === "AEP" ? "EZE" : ORIGIN_IATA} (ida + vuelta) con tasas`,
     );
   }
 
   if (dest.hotelAdultoArs + dest.hotelMenorArs > 0) {
     const name = dest.hotelNombre || "Hotel";
     const cat = dest.hotelCategoria ? ` ${dest.hotelCategoria}` : "";
+    const nights = nightsLabel(form.fechaIda, form.fechaVuelta);
+    const habitacion = dest.hotelHabitacion ? ` · ${dest.hotelHabitacion}` : "";
+    const regimen = dest.hotelRegimen ? ` · ${dest.hotelRegimen}` : "";
     items.push(
-      `${name}${cat} · ${nightsLabel(form.fechaIda, form.fechaVuelta)}${dest.hotelRegimen ? ` · ${dest.hotelRegimen}` : ""}`,
+      `${name}${cat} · ${nights}${regimen}${habitacion}`.replace(/\s+/g, " "),
     );
   }
 
   for (const id of dest.excursionIds) {
     const exc = catalog.find((e) => e.id === id);
-    if (exc) items.push(exc.nombreLimpio);
+    if (exc) items.push(displayExcursionName(exc.nombre));
   }
 
   items.push("Asistencia al viajero básica");
-  items.push(`Equipaje: ${form.equipaje}`);
   return items;
 }
 
+function itineraryHtml(text: string): string {
+  const blocks = text
+    .split(/\n\s*\n/)
+    .map((b) => b.trim())
+    .filter(Boolean);
+
+  if (blocks.length === 0) {
+    return `<div class="day"><div class="day-content muted">Itinerario a confirmar con el asesor.</div></div>`;
+  }
+
+  return blocks
+    .map((block) => {
+      const lines = block.split("\n").filter(Boolean);
+      const head = lines[0] ?? "";
+      const body = lines.slice(1).join(" ").trim();
+      // "Día 1 · Mar 28 Jul: Título del día"
+      const match = head.match(/^D[ií]a\s+(\d+)\s*·\s*([^:]+):\s*(.+)$/i);
+      if (!match) {
+        return `<div class="day"><div class="day-content">${escapeHtml(block)}</div></div>`;
+      }
+      const badge = `DÍA ${match[1]} · ${match[2].trim().toUpperCase()}`;
+      const title = match[3].trim();
+      return `<div class="day">
+        <div class="day-badge">${escapeHtml(badge)}</div>
+        <div class="day-body">
+          <div class="day-title">${escapeHtml(title)}</div>
+          ${body ? `<div class="day-content">${escapeHtml(body)}</div>` : ""}
+        </div>
+      </div>`;
+    })
+    .join("");
+}
+
+function mapHtml(lat: number, lng: number, pinLabel: string): string {
+  if (lat === 0 && lng === 0) {
+    return `<div class="map-fallback">Mapa de ${escapeHtml(pinLabel)} disponible con el asesor.</div>`;
+  }
+  const mapsUrl = `https://www.google.com/maps/place/${encodeURIComponent(pinLabel)}/@${lat},${lng},11z`;
+  return `
+  <a class="map-card" href="${mapsUrl}" target="_blank" rel="noopener">
+    <div class="map-canvas" aria-hidden="true">
+      <div class="map-land map-br"></div>
+      <div class="map-land map-py"></div>
+      <div class="map-land map-ar"></div>
+      <div class="map-water"></div>
+      <div class="map-pin">
+        <span class="map-pin-dot"></span>
+        <span class="map-pin-label">${escapeHtml(pinLabel)}</span>
+      </div>
+      <div class="map-label map-label-br">Brasil</div>
+      <div class="map-label map-label-py">Paraguay</div>
+      <div class="map-label map-label-ar">Argentina</div>
+    </div>
+    <div class="map-caption">📍 ${escapeHtml(pinLabel)} · ${lat}, ${lng} · Abrir en Google Maps ↗</div>
+  </a>`;
+}
+
 /**
- * Template MVP inspirado en COT-0010 (3 páginas A4).
- * Placeholders de tips/mapa/clima hasta recibir DBs.
+ * Template PDF cliente alineado a COT-0010 (3 páginas A4, navy + oro/cream).
+ * Sin desglose financiero interno / auditoría.
  */
 export function renderPdfHtml(data: PdfRenderData): string {
   const { cotNumber, form, result, generatedAt } = data;
   const dest = form.destinos[0];
   const destino = dest?.destino ?? form.destinosSeleccionados[0] ?? "";
-  const validUntil = addDaysIso(generatedAt, VALIDEZ_COTIZACION_DIAS);
+  const copy = getPdfCopy(destino);
+  const validUntil =
+    data.validUntil ?? addDaysIso(generatedAt, VALIDEZ_COTIZACION_DIAS);
   const totalPax = form.paxAdultos + form.paxMenores;
   const paxLabel =
     form.paxMenores > 0
       ? `${form.paxAdultos} adultos + ${form.paxMenores} ${form.paxMenores === 1 ? "niño" : "niños"}`
       : `${form.paxAdultos} ${form.paxAdultos === 1 ? "adulto" : "adultos"}`;
+  const agesLabel =
+    form.edadesMenores.length > 0
+      ? `Edades menores: ${form.edadesMenores.join(" y ")} años`
+      : "";
 
-  const includes = includesList(form);
-  const iata = IATA_BY_DESTINO[destino] ?? "???";
-  const airline = form.aerolinea?.trim() || "Aerolínea a confirmar";
+  const includes = data.includes ?? includesList(form);
+  const excludes = data.excludes ?? copy.excludes;
+  const tags =
+    data.tags ??
+    copy.defaultTags.map((t) =>
+      t.label === "Familia" && totalPax > 0
+        ? { ...t, label: `Familia ${totalPax} pax` }
+        : t,
+    );
+  const locationLabel = data.locationLabel ?? copy.locationLabel;
+  const guideSubtitle =
+    data.guideSubtitle ??
+    copy.guideSubtitle({
+      perfil: form.perfil,
+      seasonHint: copy.climate.season.toLowerCase(),
+    });
+
+  const hotelHighlights =
+    data.hotelHighlights ??
+    [
+      ...copy.hotelHighlights,
+      dest?.hotelUbicacion ? `Ubicación: ${dest.hotelUbicacion}` : null,
+      dest?.hotelAjusteRazon || null,
+    ].filter((x): x is string => Boolean(x));
+
+  const logo = getLogoDataUrl();
+  const feeLabel = feeMultiplierLabel(form.metodoPago);
 
   const excursionRows = (dest?.excursionIds ?? [])
-    .map((id) => catalog.find((e) => e.id === id))
-    .flatMap((exc) => {
-      if (!exc) return [];
+    .map((id) => {
+      const exc = catalog.find((e) => e.id === id);
+      if (!exc) return null;
       const usd =
-        exc.moneda === "USD"
-          ? exc.neto
-          : Number((exc.neto / result.tcArsUsd).toFixed(0));
-      return [
-        `<tr><td>${escapeHtml(exc.nombreLimpio)} · ${escapeHtml(exc.proveedor || "—")}</td><td class="num">USD ${money(usd)} / pax</td></tr>`,
-      ];
+        data.experiencePricesUsd?.[id] ??
+        (exc.moneda === "USD"
+          ? Math.round(exc.neto)
+          : Math.round(exc.neto / result.tcArsUsd));
+      const name = displayExcursionName(exc.nombre);
+      const detail = /PQT\s*01A/i.test(exc.nombre)
+        ? `proveedor ${exc.proveedor || "—"} · día completo PN Iguazú`
+        : /BRASILERAS|AVES/i.test(exc.nombre)
+          ? `lado brasileño + parque temático familiar (${exc.proveedor || "—"})`
+          : `proveedor ${exc.proveedor || "—"}`;
+      return { name, detail, usd };
     })
-    .join("");
+    .filter((x): x is { name: string; detail: string; usd: number } =>
+      Boolean(x),
+    );
 
-  const hotelBlock =
-    dest && dest.hotelAdultoArs + dest.hotelMenorArs > 0
-      ? `
-      <section class="block">
-        <h2>Alojamiento</h2>
-        <div class="hotel">
-          <div class="hotel-title">${escapeHtml(dest.hotelNombre || "Hotel")} <span class="stars">${starsLabel(dest.hotelCategoria || undefined)}</span></div>
-          <div class="muted">${escapeHtml(nightsLabel(form.fechaIda, form.fechaVuelta))} · ${escapeHtml(formatDateShort(form.fechaIda))} → ${escapeHtml(formatDateShort(form.fechaVuelta))}${dest.hotelUbicacion ? ` · ${escapeHtml(dest.hotelUbicacion)}` : ""}${dest.hotelHabitacion ? ` · ${escapeHtml(dest.hotelHabitacion)}` : ""}</div>
-        </div>
-      </section>`
-      : "";
+  const experiencesHtml = excursionRows.length
+    ? `<div class="exp-group">
+        <div class="exp-group-title">💧 ${escapeHtml(destino.toUpperCase())} · ${excursionRows.length} EXPERIENCIA${excursionRows.length === 1 ? "" : "S"}</div>
+        ${excursionRows
+          .map(
+            (row) => `<div class="exp-row">
+            <div>
+              <div class="exp-name">${escapeHtml(row.name)}</div>
+              <div class="exp-detail">${escapeHtml(row.detail)}</div>
+            </div>
+            <div class="exp-price">USD ${money(row.usd)} / pax</div>
+          </div>`,
+          )
+          .join("")}
+      </div>`
+    : `<p class="muted">Sin excursiones seleccionadas.</p>`;
 
-  const flightsBlock =
-    dest &&
-    dest.vueloIdaAdultoArs +
-      dest.vueloIdaMenorArs +
-      dest.vueloVueltaAdultoArs +
-      dest.vueloVueltaMenorArs >
-      0
-      ? `
-      <section class="block">
-        <h2>Vuelos</h2>
-        <div class="flight-grid">
-          <div class="flight-card">
-            <div class="label">Vuelo ida</div>
-            <div class="route">${ORIGIN_IATA} → ${iata}</div>
-            <div class="muted">${escapeHtml(formatDateEs(form.fechaIda))} · ${escapeHtml(airline)}</div>
-          </div>
-          <div class="flight-card">
-            <div class="label">Vuelo vuelta</div>
-            <div class="route">${iata} → ${ORIGIN_IATA}</div>
-            <div class="muted">${escapeHtml(formatDateEs(form.fechaVuelta))} · ${escapeHtml(airline)}</div>
-          </div>
-        </div>
-      </section>`
-      : "";
+  const upsells = copy.upsells;
+  const upsellHtml = upsells.length
+    ? `<div class="upsell-grid">
+        ${upsells
+          .map(
+            (u) => `<div class="upsell-card">
+            <div class="upsell-emoji">${u.emoji}</div>
+            <div class="upsell-price">USD ${money(u.priceUsd)} / pax</div>
+            <div class="upsell-title">${escapeHtml(u.title)}</div>
+            <div class="upsell-body">${escapeHtml(u.body)}</div>
+            <div class="upsell-badge">${escapeHtml(u.badge)}</div>
+          </div>`,
+          )
+          .join("")}
+      </div>`
+    : "";
+
+  const hotelMeta = dest
+    ? [
+        nightsLabel(form.fechaIda, form.fechaVuelta),
+        `${weekdayLongEs(form.fechaIda).slice(0, 3)} ${formatDateShortMonth(form.fechaIda).replace(/ \d{4}$/, "")} → ${weekdayLongEs(form.fechaVuelta).slice(0, 3)} ${formatDateShortMonth(form.fechaVuelta).replace(/ \d{4}$/, "")}`,
+        dest.hotelUbicacion || null,
+        dest.hotelHabitacion || null,
+        dest.hotelRegimen || null,
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : "";
 
   return `<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="utf-8" />
-<title>${escapeHtml(cotNumber)} — ${escapeHtml(form.clienteNombre)}</title>
+<title>${escapeHtml(cotNumber)} · ${escapeHtml(destino.toUpperCase())} · ${CONTACT.brand}</title>
 <style>
   @page { size: A4; margin: 0; }
   * { box-sizing: border-box; }
   body {
     margin: 0;
-    font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
-    color: #1a2e28;
+    font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
+    color: #1a2438;
     background: #fff;
-    font-size: 11px;
+    font-size: 10.5px;
     line-height: 1.45;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
   .page {
     width: 210mm;
     height: 297mm;
-    padding: 14mm 14mm 16mm;
+    padding: 10mm 11mm 12mm;
     page-break-after: always;
     position: relative;
     overflow: hidden;
   }
   .page:last-child { page-break-after: auto; }
-  .brand {
-    font-size: 11px;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: #2f6b5a;
-    font-weight: 700;
+
+  :root {
+    --navy: #1a2b4c;
+    --navy-deep: #122038;
+    --gold: #c5a059;
+    --gold-bright: #d4a84b;
+    --cream: #f7f3eb;
+    --cream-soft: #fbf8f2;
+    --muted: #5c667a;
+    --line: #e4dfd4;
+    --ok: #2f7a4f;
+    --no: #b33a3a;
+    --orange-bar: #d4883a;
   }
+
   .hero {
-    background: linear-gradient(135deg, #1b3d34 0%, #2f6b5a 55%, #4a8f78 100%);
+    background: linear-gradient(145deg, var(--navy-deep) 0%, var(--navy) 55%, #243a63 100%);
     color: #fff;
-    border-radius: 18px;
-    padding: 22px 24px;
-    margin-top: 10px;
-  }
-  .hero h1 {
-    margin: 8px 0 4px;
-    font-size: 28px;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-  }
-  .hero .sub { opacity: 0.9; font-size: 12px; }
-  .price-row {
-    display: flex;
-    justify-content: space-between;
-    gap: 16px;
-    margin-top: 18px;
-  }
-  .price-box {
-    background: rgba(255,255,255,0.12);
-    border-radius: 14px;
-    padding: 12px 14px;
-    min-width: 140px;
-  }
-  .price-box .label { font-size: 10px; opacity: 0.85; text-transform: uppercase; letter-spacing: 0.08em; }
-  .price-box .value { font-size: 26px; font-weight: 700; margin-top: 2px; }
-  .price-box .hint { font-size: 10px; opacity: 0.85; margin-top: 2px; }
-  .meta {
+    border-radius: 16px;
+    padding: 16px 18px 14px;
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 8px;
-    margin-top: 14px;
+    grid-template-columns: 1.35fr 0.85fr;
+    gap: 12px;
+    align-items: end;
   }
-  .meta-item {
-    background: #f3f7f5;
-    border-radius: 12px;
-    padding: 10px 12px;
+  .hero-logo { height: 28px; width: auto; display: block; margin-bottom: 10px; filter: brightness(0) invert(1); }
+  .hero-hello { font-size: 13px; font-weight: 400; opacity: 0.95; margin: 0 0 4px; }
+  .hero-dest {
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 42px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    line-height: 1;
+    margin: 2px 0 6px;
   }
-  .meta-item .label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: #5a736a; }
-  .meta-item .value { font-size: 12px; font-weight: 600; margin-top: 2px; }
-  h2 {
-    font-size: 11px;
+  .hero-loc { font-size: 11px; opacity: 0.9; margin-bottom: 10px; }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tag {
+    font-size: 9px;
+    padding: 4px 9px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.18);
+    white-space: nowrap;
+  }
+  .tag.accent { background: var(--gold); color: #1a2b4c; border-color: var(--gold); font-weight: 700; }
+  .hero-price { text-align: right; }
+  .hero-price .pp-label {
+    font-size: 10px;
     letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: #2f6b5a;
-    margin: 18px 0 8px;
+    color: var(--gold-bright);
+    font-weight: 700;
   }
-  .hotel-title { font-size: 15px; font-weight: 700; }
-  .stars { color: #c9a227; letter-spacing: 1px; }
-  .muted { color: #5a736a; }
-  .includes { list-style: none; padding: 0; margin: 0; }
-  .includes li { padding: 4px 0 4px 18px; position: relative; }
-  .includes li::before { content: "✓"; position: absolute; left: 0; color: #2f6b5a; font-weight: 700; }
-  .day { display: flex; gap: 10px; margin-bottom: 8px; }
-  .day-num { min-width: 52px; font-weight: 700; color: #2f6b5a; }
-  .day-content { flex: 1; }
-  .flight-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .flight-card {
-    border: 1px solid #d7e5df;
+  .hero-price .pp-value {
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 36px;
+    color: var(--gold-bright);
+    font-weight: 700;
+    line-height: 1.05;
+    margin: 2px 0;
+  }
+  .hero-price .pp-meta { font-size: 10px; opacity: 0.9; }
+  .hero-meta {
+    margin-top: 10px;
+    font-size: 9.5px;
+    opacity: 0.85;
+  }
+  .hero-meta strong { color: var(--gold-bright); font-size: 11px; }
+
+  .strip {
+    margin-top: 10px;
+    background: var(--cream);
     border-radius: 12px;
-    padding: 12px;
-    background: #fafcfb;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    overflow: hidden;
   }
-  .flight-card .label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: #5a736a; }
-  .flight-card .route { font-size: 16px; font-weight: 700; margin: 4px 0; }
-  table { width: 100%; border-collapse: collapse; }
-  td { padding: 7px 0; border-bottom: 1px solid #e4eee9; }
-  td.num { text-align: right; font-weight: 600; white-space: nowrap; }
-  .placeholder {
-    background: #fff8e8;
-    border: 1px dashed #e0c36a;
-    border-radius: 12px;
-    padding: 12px 14px;
-    color: #7a6420;
-    font-size: 11px;
+  .strip-item {
+    padding: 10px 9px;
+    border-right: 1px solid #e5ddd0;
   }
-  .footer {
-    position: absolute;
-    left: 14mm;
-    right: 14mm;
-    bottom: 10mm;
-    display: flex;
-    justify-content: space-between;
-    font-size: 9px;
-    color: #5a736a;
+  .strip-item:last-child { border-right: none; }
+  .strip-item .lbl {
+    font-size: 8px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 700;
   }
-  .contact-box {
-    background: #f3f7f5;
-    border-radius: 14px;
-    padding: 16px;
+  .strip-item .val { font-size: 12px; font-weight: 700; margin-top: 3px; color: var(--navy); }
+  .strip-item .sub { font-size: 9px; color: var(--muted); margin-top: 2px; line-height: 1.3; }
+
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
     margin-top: 12px;
   }
-  .btn-like {
-    display: inline-block;
-    margin-top: 10px;
-    background: #2f6b5a;
+  .section-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--navy);
+    font-weight: 700;
+    margin: 0 0 8px;
+  }
+  .section-title::before {
+    content: "";
+    width: 4px;
+    height: 14px;
+    background: var(--orange-bar);
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+  .hotel-name {
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--navy);
+  }
+  .stars { color: var(--gold); letter-spacing: 1px; margin-left: 4px; }
+  .hotel-meta { color: var(--muted); font-size: 9.5px; margin: 4px 0 8px; word-break: break-word; }
+  .checks { list-style: none; padding: 0; margin: 0; }
+  .checks li {
+    padding: 3px 0 3px 16px;
+    position: relative;
+    font-size: 10px;
+    word-break: break-word;
+  }
+  .checks.ok li::before { content: "✓"; position: absolute; left: 0; color: var(--ok); font-weight: 700; }
+  .checks.no li::before { content: "✗"; position: absolute; left: 0; color: var(--no); font-weight: 700; }
+  .checks.no { margin-top: 8px; }
+  .subhead {
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--navy);
+    font-weight: 700;
+    margin: 10px 0 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .subhead::before {
+    content: "";
+    width: 4px;
+    height: 12px;
+    background: var(--orange-bar);
+    border-radius: 2px;
+  }
+
+  .itinerary { margin-top: 12px; }
+  .day { display: flex; gap: 10px; margin-bottom: 8px; align-items: flex-start; }
+  .day-badge {
+    flex-shrink: 0;
+    background: var(--navy);
     color: #fff;
+    font-size: 8.5px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 5px 8px;
+    border-radius: 6px;
+    max-width: 118px;
+    line-height: 1.25;
+  }
+  .day-title { font-weight: 700; font-size: 11px; color: var(--navy); margin-bottom: 2px; }
+  .day-content { font-size: 9.5px; color: #2a3348; word-break: break-word; }
+
+  .pay-bar {
+    margin-top: 10px;
+    background: #eef0f4;
+    border-radius: 8px;
     padding: 8px 12px;
-    border-radius: 999px;
+    font-size: 10px;
+    color: #2a3348;
+  }
+  .disclaimer {
+    margin-top: 8px;
+    background: #fff8e8;
+    border: 1px solid #e8d39a;
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 9px;
+    color: #6a5a28;
+  }
+
+  /* Page 2 */
+  .p2-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    border-bottom: 2px solid var(--navy);
+    padding-bottom: 8px;
+    margin-bottom: 12px;
+  }
+  .p2-header h1 {
+    margin: 0;
+    font-size: 18px;
+    color: var(--navy);
+    letter-spacing: 0.02em;
+  }
+  .p2-header .sub { font-size: 10px; color: var(--muted); margin-top: 2px; }
+  .p2-header .cot { font-size: 10px; color: var(--muted); text-align: right; }
+
+  .exp-group {
+    background: var(--cream-soft);
+    border-radius: 12px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+  }
+  .exp-group-title {
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    font-weight: 700;
+    color: var(--navy);
+    margin-bottom: 8px;
+  }
+  .exp-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .exp-row:last-child { border-bottom: none; }
+  .exp-name { font-weight: 700; font-size: 11px; color: var(--navy); }
+  .exp-detail { font-size: 9.5px; color: var(--muted); margin-top: 2px; }
+  .exp-price { font-weight: 700; white-space: nowrap; color: var(--navy); font-size: 11px; }
+
+  .upsell-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .upsell-card {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 10px;
+    background: #fff;
+    min-height: 132px;
+  }
+  .upsell-emoji { font-size: 18px; }
+  .upsell-price { color: var(--gold); font-weight: 700; font-size: 13px; margin: 4px 0; }
+  .upsell-title { font-weight: 700; font-size: 11px; color: var(--navy); margin-bottom: 4px; word-break: break-word; }
+  .upsell-body { font-size: 9px; color: var(--muted); word-break: break-word; }
+  .upsell-badge { font-size: 8.5px; color: var(--ok); margin-top: 6px; font-weight: 600; }
+
+  .tips-grid, .pack-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .tip-card, .pack-card {
+    background: var(--cream-soft);
+    border-radius: 10px;
+    padding: 9px 10px;
+  }
+  .tip-card .t, .pack-card .t { font-weight: 700; font-size: 10.5px; color: var(--navy); margin: 2px 0 4px; }
+  .tip-card .b, .pack-card .b { font-size: 9px; color: var(--muted); word-break: break-word; }
+
+  .gastro-list { margin-bottom: 12px; }
+  .gastro-item {
+    display: grid;
+    grid-template-columns: 22px 1fr auto;
+    gap: 8px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--line);
+    align-items: start;
+  }
+  .gastro-item:last-child { border-bottom: none; }
+  .gastro-name { font-weight: 700; color: var(--navy); font-size: 11px; }
+  .gastro-body { font-size: 9.5px; color: var(--muted); word-break: break-word; }
+  .gastro-link { font-size: 9px; color: var(--gold); white-space: nowrap; text-decoration: none; }
+
+  .climate-box {
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    gap: 12px;
+    background: var(--cream);
+    border-radius: 12px;
+    padding: 12px;
+    margin-bottom: 12px;
+  }
+  .climate-badge {
+    background: var(--navy);
+    color: #fff;
+    border-radius: 10px;
+    padding: 10px;
+    text-align: center;
+  }
+  .climate-badge .s { font-size: 9px; letter-spacing: 0.12em; font-weight: 700; }
+  .climate-badge .r { font-size: 16px; font-weight: 700; margin-top: 4px; color: var(--gold-bright); }
+  .climate-body { font-size: 9.5px; color: #2a3348; word-break: break-word; }
+
+  .footer-bar {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    background: var(--navy);
+    color: #fff;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 11mm;
+    font-size: 9px;
+  }
+  .footer-bar img { height: 18px; filter: brightness(0) invert(1); }
+
+  /* Page 3 */
+  .p3-header {
+    background: var(--navy);
+    color: #fff;
+    border-radius: 12px;
+    padding: 12px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+  }
+  .p3-header .brand-line { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; font-weight: 700; }
+  .p3-header .meta { font-size: 9px; opacity: 0.85; text-align: right; }
+
+  .map-layout {
+    display: grid;
+    grid-template-columns: 1.1fr 0.9fr;
+    gap: 14px;
+    margin-bottom: 16px;
+  }
+  .map-summary { font-size: 11px; color: #2a3348; line-height: 1.55; word-break: break-word; }
+  .map-card { text-decoration: none; color: inherit; display: block; }
+  .map-canvas {
+    position: relative;
+    height: 180px;
+    border-radius: 14px;
+    overflow: hidden;
+    background: linear-gradient(160deg, #cfe6f5 0%, #b7d8ec 40%, #9ec9e0 100%);
+    border: 1px solid #c5d8e6;
+  }
+  .map-land {
+    position: absolute;
+    border-radius: 40% 45% 48% 42%;
+    opacity: 0.92;
+  }
+  .map-br { width: 52%; height: 70%; right: 4%; top: 8%; background: #7fad6a; }
+  .map-py { width: 34%; height: 42%; left: 6%; top: 10%; background: #8fb56f; }
+  .map-ar { width: 48%; height: 55%; left: 18%; bottom: 4%; background: #6f9d5c; }
+  .map-water {
+    position: absolute;
+    left: 38%; top: 28%;
+    width: 28%; height: 36%;
+    background: radial-gradient(circle at 40% 40%, #5ba3c9 0%, #3d87b0 70%);
+    border-radius: 50% 40% 55% 45%;
+    opacity: 0.85;
+  }
+  .map-pin { position: absolute; left: 48%; top: 46%; transform: translate(-50%, -100%); text-align: center; }
+  .map-pin-dot {
+    display: block;
+    width: 14px; height: 14px;
+    margin: 0 auto 4px;
+    background: #c0392b;
+    border: 2px solid #fff;
+    border-radius: 50% 50% 50% 0;
+    transform: rotate(-45deg);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+  }
+  .map-pin-label {
+    display: inline-block;
+    background: #fff;
+    color: var(--navy);
+    font-size: 9px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+  }
+  .map-label { position: absolute; font-size: 8px; font-weight: 700; color: #35553a; opacity: 0.8; }
+  .map-label-br { right: 10%; top: 14%; }
+  .map-label-py { left: 10%; top: 16%; }
+  .map-label-ar { left: 28%; bottom: 10%; }
+  .map-caption { margin-top: 6px; font-size: 9px; color: var(--muted); }
+
+  .cta-box {
+    background: var(--cream);
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 14px;
+  }
+  .cta-box h2 { margin: 0 0 6px; font-size: 14px; color: var(--navy); }
+  .cta-box p { margin: 0 0 10px; font-size: 11px; color: #2a3348; }
+  .btn {
+    display: inline-block;
+    background: var(--gold);
+    color: var(--navy-deep);
+    font-weight: 700;
     text-decoration: none;
+    padding: 10px 14px;
+    border-radius: 8px;
     font-size: 11px;
   }
+
+  .contact-box {
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 14px 16px;
+  }
+  .contact-box h3 {
+    margin: 0 0 8px;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--navy);
+  }
+  .contact-box .line { font-size: 11px; margin: 4px 0; word-break: break-word; }
+  .contact-box .brand-line { font-weight: 700; color: var(--navy); margin-top: 8px; }
+
+  .muted { color: var(--muted); }
+  .page-pad-bottom { padding-bottom: 18mm; }
 </style>
 </head>
 <body>
   <section class="page">
-    <div class="brand">${CONTACT.brand}</div>
     <div class="hero">
-      <div class="sub">${escapeHtml(cotNumber)} · ${escapeHtml(formatDateEs(generatedAt))} · válida hasta ${escapeHtml(formatDateEs(validUntil))}</div>
-      <h1>Hola, ${escapeHtml(form.clienteNombre.split(" ")[0] || form.clienteNombre)} — tu propuesta está lista</h1>
-      <div class="sub">${escapeHtml(destino)} · ${escapeHtml(form.perfil)} · ${escapeHtml(paxLabel)}</div>
-      <div class="price-row">
-        <div class="price-box">
-          <div class="label">Total general</div>
-          <div class="value">USD ${money(result.precioFinalCliente)}</div>
-          <div class="hint">${paymentMethodDesc(form.metodoPago)}</div>
+      <div>
+        <img class="hero-logo" src="${logo}" alt="${CONTACT.brand}" />
+        <p class="hero-hello">Hola, ${escapeHtml(firstName(form.clienteNombre))} — tu propuesta está lista 🎉</p>
+        <div class="hero-dest">${escapeHtml(destino.toUpperCase())}</div>
+        <div class="hero-loc">📍 ${escapeHtml(locationLabel)}</div>
+        <div class="tags">
+          ${tags
+            .map(
+              (t) =>
+                `<span class="tag${t.accent ? " accent" : ""}">${t.emoji} ${escapeHtml(t.label)}</span>`,
+            )
+            .join("")}
         </div>
-        <div class="price-box">
-          <div class="label">Por persona</div>
-          <div class="value">USD ${money(result.precioAdultoCliente)}</div>
-          <div class="hint">${totalPax} pax · ${escapeHtml(destino)}</div>
+      </div>
+      <div class="hero-price">
+        <div class="pp-label">Total por persona</div>
+        <div class="pp-value">USD ${money(result.precioAdultoCliente)}</div>
+        <div class="pp-meta">${escapeHtml(paxLabel)}</div>
+        <div class="pp-meta">${escapeHtml(form.metodoPago.charAt(0).toUpperCase() + form.metodoPago.slice(1))} · ${feeLabel}</div>
+        <div class="hero-meta">
+          <strong>${escapeHtml(cotNumber)}</strong><br/>
+          ${escapeHtml(formatDateEs(generatedAt))} · válida hasta ${escapeHtml(formatDateEs(validUntil))}
         </div>
       </div>
     </div>
 
-    <div class="meta">
-      <div class="meta-item"><div class="label">Salida</div><div class="value">${escapeHtml(formatDateShort(form.fechaIda))}</div></div>
-      <div class="meta-item"><div class="label">Regreso</div><div class="value">${escapeHtml(formatDateShort(form.fechaVuelta))}</div></div>
-      <div class="meta-item"><div class="label">Pasajeros</div><div class="value">${escapeHtml(paxLabel)}</div></div>
-      <div class="meta-item"><div class="label">Alojamiento</div><div class="value">${escapeHtml(nightsLabel(form.fechaIda, form.fechaVuelta))}</div></div>
+    <div class="strip">
+      <div class="strip-item">
+        <div class="lbl">Salida</div>
+        <div class="val">${escapeHtml(formatDateShortMonth(form.fechaIda))}</div>
+        <div class="sub">${escapeHtml(weekdayLongEs(form.fechaIda))}</div>
+      </div>
+      <div class="strip-item">
+        <div class="lbl">Regreso</div>
+        <div class="val">${escapeHtml(formatDateShortMonth(form.fechaVuelta))}</div>
+        <div class="sub">${escapeHtml(weekdayLongEs(form.fechaVuelta))}</div>
+      </div>
+      <div class="strip-item">
+        <div class="lbl">Pasajeros</div>
+        <div class="val">${escapeHtml(paxLabel)}</div>
+        ${agesLabel ? `<div class="sub">${escapeHtml(agesLabel)}</div>` : ""}
+      </div>
+      <div class="strip-item">
+        <div class="lbl">Alojamiento</div>
+        <div class="val">${escapeHtml(nightsLabel(form.fechaIda, form.fechaVuelta))}</div>
+        <div class="sub">${escapeHtml(dest?.hotelNombre || "—")}${dest?.hotelCategoria ? ` ${escapeHtml(dest.hotelCategoria)}` : ""}</div>
+      </div>
+      <div class="strip-item">
+        <div class="lbl">Total general</div>
+        <div class="val">USD ${money(result.precioFinalCliente)}</div>
+        <div class="sub">USD ${money(result.precioAdultoCliente)} / pax · ${totalPax} pax · solo ${escapeHtml(destino)}</div>
+      </div>
     </div>
 
-    ${flightsBlock}
-    ${hotelBlock}
+    <div class="two-col">
+      <div>
+        <h2 class="section-title">Alojamiento</h2>
+        <div class="hotel-name">🌳 ${escapeHtml(dest?.hotelNombre || "Hotel")} <span class="stars">${starsLabel(dest?.hotelCategoria || undefined)}</span></div>
+        <div class="hotel-meta">${escapeHtml(hotelMeta)}</div>
+        <ul class="checks ok">
+          ${hotelHighlights.map((h) => `<li>${escapeHtml(h)}</li>`).join("")}
+        </ul>
+      </div>
+      <div>
+        <h2 class="section-title">¿Qué incluye?</h2>
+        <ul class="checks ok">
+          ${includes.map((i) => `<li>${escapeHtml(i)}</li>`).join("")}
+        </ul>
+        <div class="subhead">¿Qué no incluye?</div>
+        <ul class="checks no">
+          ${excludes.map((i) => `<li>${escapeHtml(i)}</li>`).join("")}
+        </ul>
+      </div>
+    </div>
 
-    <section class="block">
-      <h2>¿Qué incluye?</h2>
-      <ul class="includes">
-        ${includes.map((i) => `<li>${escapeHtml(i)}</li>`).join("")}
-      </ul>
-    </section>
-
-    <section class="block">
-      <h2>Itinerario día a día</h2>
+    <div class="itinerary">
+      <h2 class="section-title">Itinerario día a día</h2>
       ${itineraryHtml(form.itinerario || "")}
-    </section>
-
-    <div class="footer">
-      <span>${CONTACT.brand}</span>
-      <span>${escapeHtml(cotNumber)} · Pág. 1 de 3</span>
-    </div>
-  </section>
-
-  <section class="page">
-    <div class="brand">Guía del destino — ${escapeHtml(destino)}</div>
-    <h2>Experiencias incluidas</h2>
-    ${
-      excursionRows
-        ? `<table>${excursionRows}</table>`
-        : `<div class="placeholder">Sin excursiones seleccionadas.</div>`
-    }
-
-    <h2>Excursiones disponibles (upsell)</h2>
-    <div class="placeholder">
-      Ranking de upsells pendiente de tags en catálogo. Se completará cuando el founder taggee las excursiones (Gap 7).
     </div>
 
-    <h2>Tips · Gastronomía · Clima · Qué llevar</h2>
-    <div class="placeholder">
-      Contenido editorial pendiente de DB Tips &amp; Gastro y tabla de clima (32 filas). Placeholder MVP.
-    </div>
-
-    <h2>Desglose interno (auditoría)</h2>
-    <table>
-      <tr><td>Costo neto USD</td><td class="num">${moneyDec(result.subtotalUsd)}</td></tr>
-      <tr><td>Margen agencia USD</td><td class="num">${moneyDec(result.margenAgenciaUsd)}</td></tr>
-      <tr><td>Post fee (${escapeHtml(form.metodoPago)})</td><td class="num">${moneyDec(result.precioPostFee)}</td></tr>
-      <tr><td>Margen vendedor USD</td><td class="num">${moneyDec(result.margenVendedorUsd)}</td></tr>
-      <tr><td>Precio final (CEILING)</td><td class="num"><strong>USD ${money(result.precioFinalCliente)}</strong></td></tr>
-      <tr><td>TC ARS/USD</td><td class="num">${result.tcArsUsd}</td></tr>
-    </table>
-
-    <div class="footer">
-      <span>${CONTACT.brand}</span>
-      <span>${escapeHtml(cotNumber)} · Pág. 2 de 3</span>
-    </div>
-  </section>
-
-  <section class="page">
-    <div class="brand">${CONTACT.brand} · Guía + Asesoría · ${escapeHtml(destino)}</div>
-    <h2>Dónde queda ${escapeHtml(destino)}</h2>
-    <div class="placeholder">
-      Mapa y summary pendientes de DB Mapas Destinos. Destino cotizado: <strong>${escapeHtml(destino)}</strong>
-      ${dest?.hotelUbicacion ? ` · ${escapeHtml(dest.hotelUbicacion)}` : ""}.
-    </div>
-
-    <h2>¿Querés una asesoría personalizada?</h2>
-    <div class="contact-box">
-      <p>Agendá una videollamada con un asesor Madero (15–20 minutos, sin costo).</p>
-      <a class="btn-like" href="${CONTACT.calendly}">Reservar reunión → ${CONTACT.calendly}</a>
-      <p style="margin-top:14px"><strong>Contacto directo</strong><br/>
-      WhatsApp: ${CONTACT.whatsapp}<br/>
-      Email: ${CONTACT.email}</p>
-    </div>
-
-    <p class="muted" style="margin-top:24px">
-      Cotización válida hasta el ${escapeHtml(formatDateEs(validUntil))}.
+    <div class="pay-bar">💳 ${escapeHtml(paymentFooterLine(form.metodoPago))}</div>
+    <div class="disclaimer">
+      ⚠ Cotización válida hasta el ${escapeHtml(formatDateEs(validUntil))}.
       Precios en USD sujetos a disponibilidad al tipo de cambio del día.
-      Documento confidencial.
-    </p>
+      Cambios de fechas o ruta pueden generar diferencias. Documento confidencial.
+    </div>
+  </section>
 
-    <div class="footer">
+  <section class="page page-pad-bottom">
+    <div class="p2-header">
+      <div>
+        <h1>Guía del Destino — ${escapeHtml(destino.toUpperCase())}</h1>
+        <div class="sub">${escapeHtml(guideSubtitle)}</div>
+      </div>
+      <div class="cot">${escapeHtml(cotNumber)} · Pág. 2 de 3</div>
+    </div>
+
+    <h2 class="section-title">Experiencias incluidas</h2>
+    ${experiencesHtml}
+
+    <h2 class="section-title">Excursiones disponibles</h2>
+    ${upsellHtml || `<p class="muted">Consultá upsells disponibles con tu asesor.</p>`}
+
+    <h2 class="section-title">Tips familia + niños</h2>
+    <div class="tips-grid">
+      ${copy.tips
+        .map(
+          (t) => `<div class="tip-card">
+          <div>${t.emoji}</div>
+          <div class="t">${escapeHtml(t.title)}</div>
+          <div class="b">${escapeHtml(t.body)}</div>
+        </div>`,
+        )
+        .join("")}
+    </div>
+
+    <h2 class="section-title">Gastronomía recomendada</h2>
+    <div class="gastro-list">
+      ${copy.gastro
+        .map(
+          (g) => `<div class="gastro-item">
+          <div>${g.emoji}</div>
+          <div>
+            <div class="gastro-name">${escapeHtml(g.name)}</div>
+            <div class="gastro-body">${escapeHtml(g.body)}</div>
+          </div>
+          <a class="gastro-link" href="https://www.google.com/maps/search/?api=1&query=${g.mapsQuery}" target="_blank" rel="noopener">Ver en Google Maps ↗</a>
+        </div>`,
+        )
+        .join("")}
+    </div>
+
+    <h2 class="section-title">Clima en tu viaje</h2>
+    <div class="climate-box">
+      <div class="climate-badge">
+        <div class="s">🌳 ${escapeHtml(copy.climate.season)}</div>
+        <div class="r">${escapeHtml(copy.climate.range)}</div>
+      </div>
+      <div class="climate-body">${escapeHtml(copy.climate.body)}</div>
+    </div>
+
+    <h2 class="section-title">${escapeHtml(copy.packingTitle)}</h2>
+    <div class="pack-grid">
+      ${copy.packing
+        .map(
+          (p) => `<div class="pack-card">
+          <div>${p.emoji}</div>
+          <div class="t">${escapeHtml(p.title)}</div>
+          <div class="b">${escapeHtml(p.body)}</div>
+        </div>`,
+        )
+        .join("")}
+    </div>
+
+    <div class="footer-bar">
+      <span><img src="${logo}" alt="" /> ${CONTACT.brand}</span>
+      <span>${CONTACT.whatsapp.replaceAll("-", " ")}</span>
+    </div>
+  </section>
+
+  <section class="page page-pad-bottom">
+    <div class="p3-header">
+      <div>
+        <div class="brand-line">${CONTACT.brand}</div>
+        <div style="font-size:10px;opacity:.85;margin-top:2px">Guía + Asesoría · ${escapeHtml(destino.toUpperCase())}</div>
+      </div>
+      <div class="meta">
+        Documento confidencial<br/>
+        ${escapeHtml(cotNumber)} · Pág. 3 de 3
+      </div>
+    </div>
+
+    <h2 class="section-title">Dónde queda ${escapeHtml(destino.toUpperCase())}</h2>
+    <div class="map-layout">
+      <div class="map-summary">${escapeHtml(copy.map.summary)}</div>
+      ${mapHtml(copy.map.lat, copy.map.lng, copy.map.pinLabel)}
+    </div>
+
+    <div class="cta-box">
+      <h2>¿Querés una asesoría personalizada?</h2>
+      <p>Agendá una videollamada con un asesor Madero (15–20 minutos, sin costo). Ajustamos detalles, resolvemos dudas y aseguramos la mejor experiencia para tu viaje.</p>
+      <a class="btn" href="${CONTACT.calendly}">📅 Reservar reunión Meet → ${CONTACT.calendly}</a>
+    </div>
+
+    <div class="contact-box">
+      <h3>Contacto directo</h3>
+      <div class="line">💬 WhatsApp: ${CONTACT.whatsapp}</div>
+      <div class="line">✉ ${CONTACT.email}</div>
+      <div class="brand-line">${CONTACT.brand} · EVT ${CONTACT.evt} · ${CONTACT.city}</div>
+    </div>
+
+    <div class="footer-bar">
+      <span><img src="${logo}" alt="" /> ${CONTACT.brand}</span>
       <span>${CONTACT.whatsapp} · ${CONTACT.email}</span>
-      <span>${escapeHtml(cotNumber)} · Pág. 3 de 3</span>
     </div>
   </section>
 </body>
