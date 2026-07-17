@@ -36,8 +36,11 @@ export const EQUIPAJES = [
 
 export const HOTEL_CATEGORIAS = ["3★", "4★", "5★"] as const;
 
+export const MONEDAS = ["ARS", "USD"] as const;
+
 const destinoFormSchema = z.object({
   destino: z.enum(DESTINOS),
+  moneda: z.enum(MONEDAS),
   vueloIdaAdultoArs: z.coerce.number().min(0),
   vueloIdaMenorArs: z.coerce.number().min(0),
   vueloVueltaAdultoArs: z.coerce.number().min(0),
@@ -106,6 +109,7 @@ export function emptyDestino(
 ): DestinoFormInput {
   return {
     destino,
+    moneda: "ARS",
     vueloIdaAdultoArs: 0,
     vueloIdaMenorArs: 0,
     vueloVueltaAdultoArs: 0,

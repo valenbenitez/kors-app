@@ -4,6 +4,7 @@ import type {
   DestinoCostInput,
   ExcursionInput,
 } from "@/lib/cotizador/formula";
+import { FORMULA_PARAMS } from "@/lib/cotizador/params";
 import type { CotizacionFormInput } from "@/lib/validations/cotizacion";
 
 export function resolveExcursions(ids: string[]): ExcursionInput[] {
@@ -24,23 +25,33 @@ export function resolveExcursions(ids: string[]): ExcursionInput[] {
 }
 
 export function formToFormulaInput(form: CotizacionFormInput): CotizacionInput {
-  const destinos: DestinoCostInput[] = form.destinos.map((d) => ({
-    destino: d.destino,
-    vueloIdaAdultoArs: d.vueloIdaAdultoArs,
-    vueloIdaMenorArs: d.vueloIdaMenorArs,
-    vueloVueltaAdultoArs: d.vueloVueltaAdultoArs,
-    vueloVueltaMenorArs: d.vueloVueltaMenorArs,
-    hotelAdultoArs: d.hotelAdultoArs,
-    hotelMenorArs: d.hotelMenorArs,
-    hotelAjusteArs: d.hotelAjusteArs || 0,
-    hotelNombre: d.hotelNombre,
-    hotelCategoria: d.hotelCategoria || undefined,
-    hotelRegimen: d.hotelRegimen,
-    hotelUbicacion: d.hotelUbicacion,
-    hotelHabitacion: d.hotelHabitacion,
-    hotelAjusteRazon: d.hotelAjusteRazon,
-    excursiones: resolveExcursions(d.excursionIds),
-  }));
+  const tc = FORMULA_PARAMS.tcArsUsd;
+
+  const destinos: DestinoCostInput[] = form.destinos.map((d) => {
+    // Los costos de vuelo/hotel se cargan en la moneda elegida por destino.
+    // La fórmula trabaja en ARS: si el operador cargó en USD lo llevamos a
+    // ARS-equivalente (× TC); la fórmula luego divide por TC.
+    const toArs = (amount: number) =>
+      d.moneda === "USD" ? amount * tc : amount;
+
+    return {
+      destino: d.destino,
+      vueloIdaAdultoArs: toArs(d.vueloIdaAdultoArs),
+      vueloIdaMenorArs: toArs(d.vueloIdaMenorArs),
+      vueloVueltaAdultoArs: toArs(d.vueloVueltaAdultoArs),
+      vueloVueltaMenorArs: toArs(d.vueloVueltaMenorArs),
+      hotelAdultoArs: toArs(d.hotelAdultoArs),
+      hotelMenorArs: toArs(d.hotelMenorArs),
+      hotelAjusteArs: toArs(d.hotelAjusteArs || 0),
+      hotelNombre: d.hotelNombre,
+      hotelCategoria: d.hotelCategoria || undefined,
+      hotelRegimen: d.hotelRegimen,
+      hotelUbicacion: d.hotelUbicacion,
+      hotelHabitacion: d.hotelHabitacion,
+      hotelAjusteRazon: d.hotelAjusteRazon,
+      excursiones: resolveExcursions(d.excursionIds),
+    };
+  });
 
   return {
     paxAdultos: form.paxAdultos,

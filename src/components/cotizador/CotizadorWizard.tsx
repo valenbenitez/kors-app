@@ -9,6 +9,7 @@ import {
   useForm,
   useWatch,
 } from "react-hook-form";
+import { MoneyField } from "@/components/cotizador/MoneyField";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -282,14 +283,6 @@ export function CotizadorWizard() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={loadDemoCot0010}
-          >
-            Cargar demo COT-0010
-          </Button>
           <Button type="button" variant="ghost" size="icon-sm" onClick={logout}>
             <LogOut />
           </Button>
@@ -500,68 +493,105 @@ export function CotizadorWizard() {
               const destino = destinosWatch[index]?.destino ?? field.destino;
               const options = excursionsByDestino[destino] ?? [];
               const selectedIds = destinosWatch[index]?.excursionIds ?? [];
+              const moneda = destinosWatch[index]?.moneda ?? "ARS";
+              const hasMenores = paxMenores > 0;
+              const cur = (label: string) => `${label} (${moneda})`;
               return (
                 <section
                   key={field.id}
                   className="space-y-4 border-b border-border pb-8 last:border-0"
                 >
-                  <h2 className="text-lg font-semibold">{destino}</h2>
+                  <div className="flex items-center justify-between gap-3">
+                    <h2 className="text-lg font-semibold">{destino}</h2>
+                    <div className="inline-flex rounded-full border border-border p-0.5">
+                      {(["ARS", "USD"] as const).map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() =>
+                            setValue(`destinos.${index}.moneda`, m, {
+                              shouldValidate: true,
+                            })
+                          }
+                          className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+                            moneda === m
+                              ? "bg-primary text-primary-foreground"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          {m}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
 
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-2">
-                      <Label>Vuelo ida adulto (ARS)</Label>
-                      <Input
-                        type="number"
-                        min={0}
-                        step="1"
-                        {...register(`destinos.${index}.vueloIdaAdultoArs`)}
+                      <Label>{cur("Vuelo ida adulto")}</Label>
+                      <MoneyField
+                        currency={moneda}
+                        value={destinosWatch[index]?.vueloIdaAdultoArs ?? 0}
+                        onValueChange={(v) =>
+                          setValue(`destinos.${index}.vueloIdaAdultoArs`, v)
+                        }
                       />
                     </div>
+                    {hasMenores ? (
+                      <div className="space-y-2">
+                        <Label>{cur("Vuelo ida menor")}</Label>
+                        <MoneyField
+                          currency={moneda}
+                          value={destinosWatch[index]?.vueloIdaMenorArs ?? 0}
+                          onValueChange={(v) =>
+                            setValue(`destinos.${index}.vueloIdaMenorArs`, v)
+                          }
+                        />
+                      </div>
+                    ) : null}
                     <div className="space-y-2">
-                      <Label>Vuelo ida menor (ARS)</Label>
-                      <Input
-                        type="number"
-                        min={0}
-                        step="1"
-                        {...register(`destinos.${index}.vueloIdaMenorArs`)}
+                      <Label>{cur("Vuelo vuelta adulto")}</Label>
+                      <MoneyField
+                        currency={moneda}
+                        value={destinosWatch[index]?.vueloVueltaAdultoArs ?? 0}
+                        onValueChange={(v) =>
+                          setValue(`destinos.${index}.vueloVueltaAdultoArs`, v)
+                        }
                       />
                     </div>
+                    {hasMenores ? (
+                      <div className="space-y-2">
+                        <Label>{cur("Vuelo vuelta menor")}</Label>
+                        <MoneyField
+                          currency={moneda}
+                          value={destinosWatch[index]?.vueloVueltaMenorArs ?? 0}
+                          onValueChange={(v) =>
+                            setValue(`destinos.${index}.vueloVueltaMenorArs`, v)
+                          }
+                        />
+                      </div>
+                    ) : null}
                     <div className="space-y-2">
-                      <Label>Vuelo vuelta adulto (ARS)</Label>
-                      <Input
-                        type="number"
-                        min={0}
-                        step="1"
-                        {...register(`destinos.${index}.vueloVueltaAdultoArs`)}
+                      <Label>{cur("Hotel adulto total")}</Label>
+                      <MoneyField
+                        currency={moneda}
+                        value={destinosWatch[index]?.hotelAdultoArs ?? 0}
+                        onValueChange={(v) =>
+                          setValue(`destinos.${index}.hotelAdultoArs`, v)
+                        }
                       />
                     </div>
-                    <div className="space-y-2">
-                      <Label>Vuelo vuelta menor (ARS)</Label>
-                      <Input
-                        type="number"
-                        min={0}
-                        step="1"
-                        {...register(`destinos.${index}.vueloVueltaMenorArs`)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Hotel adulto total (ARS)</Label>
-                      <Input
-                        type="number"
-                        min={0}
-                        step="1"
-                        {...register(`destinos.${index}.hotelAdultoArs`)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Hotel menor total (ARS)</Label>
-                      <Input
-                        type="number"
-                        min={0}
-                        step="1"
-                        {...register(`destinos.${index}.hotelMenorArs`)}
-                      />
-                    </div>
+                    {hasMenores ? (
+                      <div className="space-y-2">
+                        <Label>{cur("Hotel menor total")}</Label>
+                        <MoneyField
+                          currency={moneda}
+                          value={destinosWatch[index]?.hotelMenorArs ?? 0}
+                          onValueChange={(v) =>
+                            setValue(`destinos.${index}.hotelMenorArs`, v)
+                          }
+                        />
+                      </div>
+                    ) : null}
                     <div className="space-y-2">
                       <Label>Nombre hotel</Label>
                       <Input {...register(`destinos.${index}.hotelNombre`)} />
@@ -597,11 +627,14 @@ export function CotizadorWizard() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>Ajuste operador ARS (±)</Label>
-                      <Input
-                        type="number"
-                        step="1"
-                        {...register(`destinos.${index}.hotelAjusteArs`)}
+                      <Label>{cur("Ajuste operador ±")}</Label>
+                      <MoneyField
+                        currency={moneda}
+                        allowNegative
+                        value={destinosWatch[index]?.hotelAjusteArs ?? 0}
+                        onValueChange={(v) =>
+                          setValue(`destinos.${index}.hotelAjusteArs`, v)
+                        }
                       />
                     </div>
                   </div>
