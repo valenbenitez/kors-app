@@ -219,55 +219,6 @@ export function CotizadorWizard() {
     window.location.href = "/login";
   }
 
-  function loadDemoCot0010() {
-    const flightArs = 233.9 * FORMULA_PARAMS.tcArsUsd;
-    const hotelArs = 1_277_794 / 7;
-    // Prefer catalog rows for Iguazú around Jul 2026
-    const iguazu = filterExcursions({
-      destino: "Iguazú",
-      fechaIda: "2026-07-28",
-    });
-    const pqt = iguazu.find((e) => e.nombre.includes("PQT 01A"));
-    const bras = iguazu.find(
-      (e) =>
-        e.nombre.toLowerCase().includes("brasil") ||
-        e.nombre.toLowerCase().includes("aves"),
-    );
-
-    setValue("clienteNombre", "Krystel");
-    setValue("paisOrigen", "Perú");
-    setValue("whatsapp", "+51999958694");
-    setValue("perfil", "Familia con niños");
-    setValue("destinosSeleccionados", ["Iguazú"]);
-    setValue("fechaIda", "2026-07-28");
-    setValue("fechaVuelta", "2026-07-31");
-    setValue("paxAdultos", 5);
-    setValue("paxMenores", 2);
-    setValue("edadesMenores", [6, 7]);
-    setValue("metodoPago", "tarjeta");
-    setValue("equipaje", "carry-on");
-    setValue("aerolinea", "JetSMART");
-    replace([
-      {
-        ...emptyDestino("Iguazú"),
-        vueloIdaAdultoArs: flightArs,
-        vueloIdaMenorArs: flightArs,
-        hotelAdultoArs: hotelArs,
-        hotelMenorArs: hotelArs,
-        hotelNombre: "Yvy Hotel de Selva",
-        hotelCategoria: "4★",
-        hotelRegimen: "desayuno incluido",
-        hotelUbicacion: "Puerto Iguazú, 2.32 km del centro",
-        hotelHabitacion: "2 × habitación Twin Estándar",
-        hotelAjusteArs: 0,
-        excursionIds: [pqt?.id, bras?.id].filter(Boolean) as string[],
-      },
-    ]);
-    setStep(0);
-    setPreview(null);
-    setServerError(null);
-  }
-
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-8">
       <header className="flex items-start justify-between gap-4">
@@ -571,7 +522,7 @@ export function CotizadorWizard() {
                       </div>
                     ) : null}
                     <div className="space-y-2">
-                      <Label>{cur("Hotel adulto total")}</Label>
+                      <Label>{cur("Hotel por adulto")}</Label>
                       <MoneyField
                         currency={moneda}
                         value={destinosWatch[index]?.hotelAdultoArs ?? 0}
@@ -582,7 +533,7 @@ export function CotizadorWizard() {
                     </div>
                     {hasMenores ? (
                       <div className="space-y-2">
-                        <Label>{cur("Hotel menor total")}</Label>
+                        <Label>{cur("Hotel por menor")}</Label>
                         <MoneyField
                           currency={moneda}
                           value={destinosWatch[index]?.hotelMenorArs ?? 0}
