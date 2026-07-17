@@ -4,7 +4,11 @@ const nextConfig: NextConfig = {
   /* config options here */
   reactCompiler: true,
 
-  serverExternalPackages: ["@sparticuz/chromium", "puppeteer-core", "puppeteer"],
+  serverExternalPackages: [
+    "@sparticuz/chromium",
+    "puppeteer-core",
+    "puppeteer",
+  ],
   outputFileTracingIncludes: {
     "/api/generate-pdf": [
       "./node_modules/@sparticuz/chromium/bin/**",
@@ -20,9 +24,9 @@ const nextConfig: NextConfig = {
       {
         source: "/",
         destination: "/login",
-        permanent: true
-      }
-    ]
+        permanent: true,
+      },
+    ];
   },
 };
 
