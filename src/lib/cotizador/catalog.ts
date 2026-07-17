@@ -83,16 +83,46 @@ function inValidityWindow(
   return true;
 }
 
-/** Filtra catálogo por destino + activa + vigencia respecto a fecha de ida. */
+/** Normalize text for case/accent/whitespace-insensitive search. */
+export function normalizeSearchText(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function hasVisibleName(exc: CatalogExcursion): boolean {
+  return Boolean(exc.nombre.trim() || exc.nombreLimpio.trim());
+}
+
+function matchesNameQuery(exc: CatalogExcursion, query: string): boolean {
+  const normalizedQuery = normalizeSearchText(query);
+  if (!normalizedQuery) return true;
+  return (
+    normalizeSearchText(exc.nombre).includes(normalizedQuery) ||
+    normalizeSearchText(exc.nombreLimpio).includes(normalizedQuery)
+  );
+}
+
+/**
+ * Filter catalog by destination + active + validity for departure date.
+ * Optional `query` further narrows by name (nombre / nombreLimpio).
+ * Empty query returns the same list as without query.
+ */
 export function filterExcursions(options: {
   destino: string;
   fechaIda: string;
+  query?: string;
 }): CatalogExcursion[] {
-  const { destino, fechaIda } = options;
+  const { destino, fechaIda, query = "" } = options;
   return catalog.filter(
     (exc) =>
       exc.activa &&
       exc.destino === destino &&
-      inValidityWindow(fechaIda, exc.validezDesde, exc.validezHasta),
+      hasVisibleName(exc) &&
+      inValidityWindow(fechaIda, exc.validezDesde, exc.validezHasta) &&
+      matchesNameQuery(exc, query),
   );
 }

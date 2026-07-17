@@ -70,6 +70,10 @@ export function CotizadorWizard() {
   const [serverError, setServerError] = useState<string | null>(null);
   const [preview, setPreview] = useState<FormulaResult | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  // Per-destination search query; filtering the list does not clear excursionIds.
+  const [excursionQueries, setExcursionQueries] = useState<
+    Record<string, string>
+  >({});
   // Guard reentrante: garantiza como máximo una petición activa aunque
   // lleguen submits concurrentes (doble click / doble Enter) antes del rerender.
   const isGeneratingRef = useRef(false);
@@ -441,6 +445,12 @@ export function CotizadorWizard() {
             {fields.map((field, index) => {
               const destino = destinosWatch[index]?.destino ?? field.destino;
               const options = excursionsByDestino[destino] ?? [];
+              const query = excursionQueries[destino] ?? "";
+              // Selected ids stay in form even when hidden by the name filter.
+              const visibleOptions =
+                fechaIda && query.trim()
+                  ? filterExcursions({ destino, fechaIda, query })
+                  : options;
               const selectedIds = destinosWatch[index]?.excursionIds ?? [];
               const moneda = destinosWatch[index]?.moneda ?? "ARS";
               const hasMenores = paxMenores > 0;
@@ -600,47 +610,69 @@ export function CotizadorWizard() {
                         destino/fecha.
                       </p>
                     ) : (
-                      <div className="max-h-64 space-y-2 overflow-y-auto rounded-2xl border border-border p-3">
-                        {options.map((exc) => {
-                          const checked = selectedIds.includes(exc.id);
-                          return (
-                            <label
-                              key={exc.id}
-                              className="flex cursor-pointer items-start gap-3 rounded-xl px-2 py-1.5 hover:bg-muted"
-                            >
-                              <input
-                                type="checkbox"
-                                className="mt-1"
-                                checked={checked}
-                                onChange={(e) => {
-                                  const current =
-                                    getValues(
-                                      `destinos.${index}.excursionIds`,
-                                    ) ?? [];
-                                  const next = e.target.checked
-                                    ? [...current, exc.id]
-                                    : current.filter((id) => id !== exc.id);
-                                  setValue(
-                                    `destinos.${index}.excursionIds`,
-                                    next,
-                                  );
-                                }}
-                              />
-                              <span className="text-sm">
-                                <span className="font-medium">
-                                  {exc.nombreLimpio}
-                                </span>
-                                <span className="mt-0.5 block text-muted-foreground">
-                                  {exc.moneda}{" "}
-                                  {exc.neto.toLocaleString("es-AR")} ·{" "}
-                                  {exc.politicaMenores}
-                                  {exc.proveedor ? ` · ${exc.proveedor}` : ""}
-                                </span>
-                              </span>
-                            </label>
-                          );
-                        })}
-                      </div>
+                      <>
+                        <Input
+                          type="search"
+                          placeholder="Buscar excursión por nombre…"
+                          value={excursionQueries[destino] ?? ""}
+                          onChange={(e) =>
+                            setExcursionQueries((prev) => ({
+                              ...prev,
+                              [destino]: e.target.value,
+                            }))
+                          }
+                          aria-label={`Buscar excursiones en ${destino}`}
+                        />
+                        {visibleOptions.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">
+                            No hay coincidencias para tu búsqueda.
+                          </p>
+                        ) : (
+                          <div className="max-h-64 space-y-2 overflow-y-auto rounded-2xl border border-border p-3">
+                            {visibleOptions.map((exc) => {
+                              const checked = selectedIds.includes(exc.id);
+                              return (
+                                <label
+                                  key={exc.id}
+                                  className="flex cursor-pointer items-start gap-3 rounded-xl px-2 py-1.5 hover:bg-muted"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    className="mt-1"
+                                    checked={checked}
+                                    onChange={(e) => {
+                                      const current =
+                                        getValues(
+                                          `destinos.${index}.excursionIds`,
+                                        ) ?? [];
+                                      const next = e.target.checked
+                                        ? [...current, exc.id]
+                                        : current.filter((id) => id !== exc.id);
+                                      setValue(
+                                        `destinos.${index}.excursionIds`,
+                                        next,
+                                      );
+                                    }}
+                                  />
+                                  <span className="text-sm">
+                                    <span className="font-medium">
+                                      {exc.nombreLimpio}
+                                    </span>
+                                    <span className="mt-0.5 block text-muted-foreground">
+                                      {exc.moneda}{" "}
+                                      {exc.neto.toLocaleString("es-AR")} ·{" "}
+                                      {exc.politicaMenores}
+                                      {exc.proveedor
+                                        ? ` · ${exc.proveedor}`
+                                        : ""}
+                                    </span>
+                                  </span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 </section>
