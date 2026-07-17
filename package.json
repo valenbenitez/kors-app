@@ -9,7 +9,9 @@
     "lint": "biome check",
     "format": "biome format --write",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "emulators:firestore": "firebase emulators:start --only firestore",
+    "test:firestore": "firebase emulators:exec --only firestore --project demo-kors \"FIREBASE_PROJECT_ID=demo-kors vitest run --config vitest.firestore.config.ts\""
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
@@ -18,6 +20,8 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "decimal.js": "^10.6.0",
+    "firebase": "^12.16.0",
+    "firebase-admin": "^14.2.0",
     "jose": "^6.2.3",
     "lucide-react": "^1.24.0",
     "next": "16.2.10",
@@ -43,6 +47,7 @@
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^6.0.3",
     "babel-plugin-react-compiler": "1.0.0",
+    "firebase-tools": "^15.24.0",
     "jsdom": "^29.1.1",
     "pixelmatch": "^7.2.0",
     "pngjs": "^7.0.0",

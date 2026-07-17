@@ -45,3 +45,9 @@ yarn-error.log*
 next-env.d.ts
 
 .cursor
+
+# firebase emulators
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log

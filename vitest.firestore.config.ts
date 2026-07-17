@@ -2,14 +2,12 @@ import path from "node:path";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
+/** Vitest config for Firestore emulator integration tests only. */
 export default defineConfig({
   plugins: [react()],
   test: {
-    // Default node para los tests de lógica; los tests de componentes
-    // declaran `// @vitest-environment jsdom` en el archivo.
     environment: "node",
-    // Emulator suite: only via `pnpm test:firestore` (needs Firestore emulator).
-    exclude: ["**/node_modules/**", "**/dist/**", "**/*.emulator.test.ts"],
+    include: ["src/lib/firebase/trip-quotes/repository.emulator.test.ts"],
   },
   resolve: {
     alias: {
