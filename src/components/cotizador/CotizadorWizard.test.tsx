@@ -1,0 +1,179 @@
+// @vitest-environment jsdom
+import "@testing-library/jest-dom/vitest";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import userEvent, { type UserEvent } from "@testing-library/user-event";
+import { act } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { CotizadorWizard } from "@/components/cotizador/CotizadorWizard";
+
+const fetchMock = vi.fn<typeof fetch>();
+
+function pdfResponse(): Response {
+  return {
+    ok: true,
+    blob: async () => new Blob(["pdf"], { type: "application/pdf" }),
+    headers: { get: () => 'attachment; filename="cotizacion.pdf"' },
+  } as unknown as Response;
+}
+
+function errorResponse(): Response {
+  return {
+    ok: false,
+    json: async () => ({ error: "Fallo del servidor" }),
+  } as unknown as Response;
+}
+
+function getForm(): HTMLFormElement {
+  const form = document.querySelector("form");
+  if (!form) throw new Error("No se encontró el <form> del wizard");
+  return form;
+}
+
+/** Espera a que terminen validaciones async pendientes antes de asertar. */
+async function settle() {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  });
+}
+
+async function fillStep0(user: UserEvent) {
+  await user.type(
+    screen.getByLabelText("Nombre completo"),
+    "Cliente de Prueba",
+  );
+  await user.type(screen.getByLabelText("WhatsApp"), "+54 9 11 12345678");
+  fireEvent.change(screen.getByLabelText("Fecha ida"), {
+    target: { value: "2026-08-10" },
+  });
+  fireEvent.change(screen.getByLabelText("Fecha vuelta"), {
+    target: { value: "2026-08-15" },
+  });
+}
+
+async function goToFinalStep(user: UserEvent) {
+  await fillStep0(user);
+  await user.click(screen.getByRole("button", { name: "Continuar" }));
+  await screen.findByText("Nombre hotel");
+  await user.click(screen.getByRole("button", { name: "Continuar" }));
+  await screen.findByRole("button", { name: "Generar PDF" });
+}
+
+beforeEach(() => {
+  vi.stubGlobal("fetch", fetchMock);
+  URL.createObjectURL = vi.fn(() => "blob:mock");
+  URL.revokeObjectURL = vi.fn();
+  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+});
+
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+  fetchMock.mockReset();
+});
+
+describe("CotizadorWizard — generación del PDF", () => {
+  it("no llama a /api/generate-pdf al presionar Enter en un input del paso 0", async () => {
+    const user = userEvent.setup();
+    render(<CotizadorWizard />);
+
+    // Datos válidos: sin el guard de paso, el submit dispararía la generación.
+    await fillStep0(user);
+    await user.type(screen.getByLabelText("Nombre completo"), "{Enter}");
+    // Fuerza el evento submit del form (equivalente al submit implícito por Enter).
+    fireEvent.submit(getForm());
+    await settle();
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("no llama a /api/generate-pdf con el formulario incompleto en el paso 0", async () => {
+    const user = userEvent.setup();
+    render(<CotizadorWizard />);
+
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await screen.findByText("Ingresá el nombre del cliente");
+    fireEvent.submit(getForm());
+    await settle();
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("navegar hasta el paso final no llama a /api/generate-pdf", async () => {
+    const user = userEvent.setup();
+    render(<CotizadorWizard />);
+
+    await goToFinalStep(user);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("con formulario válido, click en Generar PDF llama exactamente 1 vez a fetch", async () => {
+    fetchMock.mockResolvedValue(pdfResponse());
+    const user = userEvent.setup();
+    render(<CotizadorWizard />);
+
+    await goToFinalStep(user);
+    await user.click(screen.getByRole("button", { name: "Generar PDF" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/generate-pdf",
+      expect.objectContaining({ method: "POST" }),
+    );
+    // Termina la generación y vuelve al estado normal sin peticiones extra.
+    await screen.findByRole("button", { name: "Generar PDF" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("doble click rápido en Generar PDF produce exactamente 1 petición", async () => {
+    let resolveFetch: ((response: Response) => void) | undefined;
+    fetchMock.mockImplementation(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveFetch = resolve;
+        }),
+    );
+    const user = userEvent.setup();
+    render(<CotizadorWizard />);
+
+    await goToFinalStep(user);
+    const generateButton = screen.getByRole("button", { name: "Generar PDF" });
+    // Dos clicks antes de que el rerender deshabilite el botón.
+    fireEvent.click(generateButton);
+    fireEvent.click(generateButton);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      resolveFetch?.(pdfResponse());
+    });
+    await screen.findByRole("button", { name: "Generar PDF" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("ante error del server muestra el mensaje y permite reintentar", async () => {
+    fetchMock
+      .mockResolvedValueOnce(errorResponse())
+      .mockResolvedValue(pdfResponse());
+    const user = userEvent.setup();
+    render(<CotizadorWizard />);
+
+    await goToFinalStep(user);
+    await user.click(screen.getByRole("button", { name: "Generar PDF" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Fallo del servidor");
+
+    // Reintento sin perder datos: el botón vuelve a estar disponible.
+    await user.click(screen.getByRole("button", { name: "Generar PDF" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument(),
+    );
+  });
+});

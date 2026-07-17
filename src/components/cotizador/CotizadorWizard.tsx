@@ -2,7 +2,7 @@
 
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { Loader2, LogOut } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   type Resolver,
   useFieldArray,
@@ -70,6 +70,9 @@ export function CotizadorWizard() {
   const [serverError, setServerError] = useState<string | null>(null);
   const [preview, setPreview] = useState<FormulaResult | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  // Guard reentrante: garantiza como máximo una petición activa aunque
+  // lleguen submits concurrentes (doble click / doble Enter) antes del rerender.
+  const isGeneratingRef = useRef(false);
 
   const form = useForm<CotizacionFormInput>({
     resolver: standardSchemaResolver(
@@ -181,6 +184,8 @@ export function CotizadorWizard() {
   }
 
   async function onGenerate(values: CotizacionFormInput) {
+    if (isGeneratingRef.current) return;
+    isGeneratingRef.current = true;
     setServerError(null);
     setIsGenerating(true);
     try {
@@ -210,6 +215,7 @@ export function CotizadorWizard() {
     } catch {
       setServerError("Error de red al generar el PDF");
     } finally {
+      isGeneratingRef.current = false;
       setIsGenerating(false);
     }
   }
@@ -258,7 +264,14 @@ export function CotizadorWizard() {
       </nav>
 
       <form
-        onSubmit={handleSubmit(onGenerate)}
+        onSubmit={(event) => {
+          // Solo el paso final genera el PDF: Enter en pasos previos es no-op.
+          if (step !== 2) {
+            event.preventDefault();
+            return;
+          }
+          void handleSubmit(onGenerate)(event);
+        }}
         className="rounded-4xl border border-border bg-card p-6 shadow-sm"
         noValidate
       >
