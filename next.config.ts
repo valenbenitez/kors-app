@@ -3,9 +3,18 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   /* config options here */
   reactCompiler: true,
-  // Resolved from node_modules at runtime so the Chromium binary is traced
-  // correctly on Vercel instead of being (mis)bundled into the function.
+
   serverExternalPackages: ["@sparticuz/chromium", "puppeteer-core", "puppeteer"],
+  outputFileTracingIncludes: {
+    "/api/generate-pdf": [
+      "./node_modules/@sparticuz/chromium/bin/**",
+      "./node_modules/.pnpm/@sparticuz+chromium@*/node_modules/@sparticuz/chromium/bin/**",
+    ],
+    "/api/generate-pdf/route": [
+      "./node_modules/@sparticuz/chromium/bin/**",
+      "./node_modules/.pnpm/@sparticuz+chromium@*/node_modules/@sparticuz/chromium/bin/**",
+    ],
+  },
   async redirects() {
     return [
       {
