@@ -1,7 +1,7 @@
 "use client";
 
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
-import { Loader2, LogOut } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import {
   type Resolver,
@@ -220,30 +220,15 @@ export function CotizadorWizard() {
     }
   }
 
-  async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    window.location.href = "/login";
-  }
-
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-8">
-      <header className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
-            KORS · Cotizador MVP
-          </p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight">
-            Nueva cotización
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            TC ARS/USD {FORMULA_PARAMS.tcArsUsd} · fórmula v2.9
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button type="button" variant="ghost" size="icon-sm" onClick={logout}>
-            <LogOut />
-          </Button>
-        </div>
+      <header>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          Nueva cotización
+        </h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          TC ARS/USD {FORMULA_PARAMS.tcArsUsd} · fórmula v2.9
+        </p>
       </header>
 
       <nav className="flex gap-2">

@@ -20,6 +20,10 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/generate", request.url));
   }
 
+  if (session && pathname === "/") {
+    return NextResponse.redirect(new URL("/generate", request.url));
+  }
+
   return NextResponse.next();
 }
 
