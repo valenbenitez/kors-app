@@ -2,8 +2,8 @@ import type { PdfDestinationCopy } from "@/data/pdf-copy/types";
 
 /**
  * Copy editorial para PDF cliente — Iguazú.
- * Origen: PDF referencia COT-0010 + Tips & Gastro CSV + Mapas Destinos CSV.
- * Extensible: agregar otros destinos en `index.ts` con la misma forma.
+ * Tips / gastro / mapa: Tips & Gastro CSV + Mapas Destinos CSV.
+ * Exclusiones y highlights: genéricos del destino (sin datos de un caso/lead).
  */
 export const iguazuPdfCopy: PdfDestinationCopy = {
   locationLabel: "Puerto Iguazú, Misiones · Argentina",
@@ -16,16 +16,16 @@ export const iguazuPdfCopy: PdfDestinationCopy = {
   guideSubtitle: ({ perfil, seasonHint }) =>
     `Iguazú · ${seasonHint} · ${perfil.toLowerCase()}`,
   excludes: [
-    "Vuelos internacionales Lima ↔ Buenos Aires NO incluidos · cliente gestiona por su cuenta (referencia LATAM 2445/2464 · USD ~730/pax)",
-    "Transfers en Buenos Aires NO incluidos · cliente coordina AEP↔EZE entre vuelo internacional y JetSMART (~USD 30-50/pax · Tienda León / remis privado)",
-    "Alojamiento en Buenos Aires NO incluido · cliente decide si necesita hotel tránsito Mar 28 (día libre BUE) o Vie 31 (post arribo EZE)",
-    "JetSMART NO incluye valija despachada · tarifa Economy J/Q Basic — cliente compra add-on en web (~USD 25-40/tramo/pax) o usa solo carry-on",
-    "Ingreso al PN Iguazú (Arg ARS ~30.000 ad + ARS 6.000 menor 6-12) · al PN Brasil (BRL ~120/ad · 50% menor) · entrada Parque de Aves (BRL ~70 ad / 50% menor)",
+    "Vuelos internacionales no incluidos · el cliente gestiona por su cuenta salvo indicación expresa",
+    "Transfers en ciudad de origen o conexión (fuera de Iguazú) no incluidos salvo indicación expresa",
+    "Alojamiento fuera de Puerto Iguazú / Foz no incluido",
+    "Equipaje despachado si la tarifa aérea no lo incluye — add-on a cargo del cliente con la aerolínea",
+    "Ingreso al PN Iguazú (lado argentino), PN do Iguaçu (lado brasileño) y Parque de las Aves — tarifas vigentes al día de la visita",
     "Almuerzos, cenas, bebidas, gastos personales",
   ],
   hotelHighlights: [
     "Hotel boutique de selva · piscina rodeada de selva · entorno natural privilegiado",
-    "Ideal familia · descuento aplicado sobre tarifa rack",
+    "Ideal para familias · entorno natural y tranquilo",
     "Cerca de Cataratas + Triple Frontera",
   ],
   upsells: [

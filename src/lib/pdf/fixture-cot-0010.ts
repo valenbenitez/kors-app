@@ -9,6 +9,11 @@ import type { CotizacionFormInput } from "@/lib/validations/cotizacion";
  * Validez: la ref muestra “válida hasta 29 jun 2026” (+2 días desde 27 jun).
  * El runtime usa `VALIDEZ_COTIZACION_DIAS` (7). Este fixture fija `validUntil`
  * a la fecha de la ref para matching visual de snapshots.
+ *
+ * Overrides (`includes`, `excludes`, `hotelHighlights`, `tags`,
+ * `experiencePricesUsd`, `guideSubtitle`) son **solo para tests/snapshots**.
+ * `POST /api/generate-pdf` nunca los envía — el template usa form + catálogo +
+ * copy editorial genérico del destino.
  */
 export const COT_0010_INCLUDES = [
   "2 vuelos JetSMART cabotaje EZE-IGR-EZE (ida + vuelta) con tasas",

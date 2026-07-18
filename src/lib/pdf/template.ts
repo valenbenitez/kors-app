@@ -1,5 +1,6 @@
 import { getPdfCopy } from "@/data/pdf-copy";
-import { catalog } from "@/lib/cotizador/catalog";
+import { type CatalogExcursion, catalog } from "@/lib/cotizador/catalog";
+import { cleanExcursionTitle } from "@/lib/cotizador/clean-title";
 import {
   addDaysIso,
   CONTACT,
@@ -65,7 +66,12 @@ function firstName(full: string): string {
   return full.split(/\s+/)[0] || full;
 }
 
-function displayExcursionName(raw: string): string {
+/**
+ * Display name for PDF: prefer catalog `nombreLimpio`.
+ * Optional aliases are generic catalog product titles (not quote-specific).
+ */
+function displayExcursionName(exc: CatalogExcursion): string {
+  const raw = exc.nombre;
   if (/^PQT\s*01A/i.test(raw)) {
     return "PQT 01A · Transfer in/out + Cataratas Argentinas";
   }
@@ -75,11 +81,11 @@ function displayExcursionName(raw: string): string {
   if (/GRAN\s*AVENTURA/i.test(raw)) {
     return "Gran Aventura — paseo en lancha bajo cataratas";
   }
-  return raw
-    .replace(/\s*\((REGULAR|PRIVADO)\)\s*$/i, "")
-    .replace(/^EXCURSION\s+/i, "")
-    .replace(/^EXC\s+/i, "")
-    .trim();
+  return exc.nombreLimpio || cleanExcursionTitle(raw);
+}
+
+function experienceDetail(exc: CatalogExcursion): string {
+  return exc.proveedor?.trim() ? `proveedor ${exc.proveedor.trim()}` : "";
 }
 
 function includesList(form: CotizacionFormInput): string[] {
@@ -115,7 +121,7 @@ function includesList(form: CotizacionFormInput): string[] {
 
   for (const id of dest.excursionIds) {
     const exc = catalog.find((e) => e.id === id);
-    if (exc) items.push(displayExcursionName(exc.nombre));
+    if (exc) items.push(displayExcursionName(exc));
   }
 
   items.push("Asistencia al viajero básica");
@@ -237,12 +243,8 @@ export function renderPdfHtml(data: PdfRenderData): string {
         (exc.moneda === "USD"
           ? Math.round(exc.neto)
           : Math.round(exc.neto / result.tcArsUsd));
-      const name = displayExcursionName(exc.nombre);
-      const detail = /PQT\s*01A/i.test(exc.nombre)
-        ? `proveedor ${exc.proveedor || "—"} · día completo PN Iguazú`
-        : /BRASILERAS|AVES/i.test(exc.nombre)
-          ? `lado brasileño + parque temático familiar (${exc.proveedor || "—"})`
-          : `proveedor ${exc.proveedor || "—"}`;
+      const name = displayExcursionName(exc);
+      const detail = experienceDetail(exc);
       return { name, detail, usd };
     })
     .filter((x): x is { name: string; detail: string; usd: number } =>
@@ -257,7 +259,7 @@ export function renderPdfHtml(data: PdfRenderData): string {
             (row) => `<div class="exp-row">
             <div>
               <div class="exp-name">${escapeHtml(row.name)}</div>
-              <div class="exp-detail">${escapeHtml(row.detail)}</div>
+              ${row.detail ? `<div class="exp-detail">${escapeHtml(row.detail)}</div>` : ""}
             </div>
             <div class="exp-price">USD ${money(row.usd)} / pax</div>
           </div>`,

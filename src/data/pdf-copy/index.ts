@@ -5,7 +5,7 @@ const BY_DESTINO: Record<string, PdfDestinationCopy> = {
   Iguazú: iguazuPdfCopy,
 };
 
-/** Copy editorial por destino. Hoy solo Iguazú (AC COT-0010); otros destinos → fallback mínimo. */
+/** Copy editorial por destino. Hoy solo Iguazú; otros destinos → fallback genérico (sin inventar Iguazú). */
 export function getPdfCopy(destino: string): PdfDestinationCopy {
   const known = BY_DESTINO[destino];
   if (known) return known;
