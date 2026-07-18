@@ -1,6 +1,7 @@
 "use client";
 
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
+import { signInWithEmailAndPassword } from "firebase/auth";
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -8,6 +9,8 @@ import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { toUserFacingAuthError } from "@/lib/auth/errors";
+import { getClientAuth } from "@/lib/firebase/client";
 import { type LoginInput, loginSchema } from "@/lib/validations/auth";
 
 export function LoginForm() {
@@ -29,22 +32,33 @@ export function LoginForm() {
   async function onSubmit(values: LoginInput) {
     setServerError(null);
 
-    const response = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(values),
-    });
+    try {
+      const credential = await signInWithEmailAndPassword(
+        getClientAuth(),
+        values.email,
+        values.password,
+      );
+      const idToken = await credential.user.getIdToken();
 
-    if (!response.ok) {
-      const data = (await response.json().catch(() => null)) as {
-        error?: string;
-      } | null;
-      setServerError(data?.error ?? "No se pudo iniciar sesión");
-      return;
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken }),
+      });
+
+      if (!response.ok) {
+        const data = (await response.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        setServerError(data?.error ?? "No se pudo iniciar sesión");
+        return;
+      }
+
+      router.push("/generate");
+      router.refresh();
+    } catch (error) {
+      setServerError(toUserFacingAuthError(error));
     }
-
-    router.push("/generate");
-    router.refresh();
   }
 
   return (

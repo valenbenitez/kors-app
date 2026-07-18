@@ -136,6 +136,7 @@ describe("parseTripQuoteDoc", () => {
       status: "generated",
       createdAt,
       updatedAt,
+      createdBy: { uid: "uid-1", email: "a@kors.com" },
       form: validForm,
       result: validResult,
     });
@@ -145,6 +146,7 @@ describe("parseTripQuoteDoc", () => {
     expect(doc.status).toBe("generated");
     expect(doc.createdAt).toEqual(createdAt.toDate());
     expect(doc.updatedAt).toEqual(updatedAt.toDate());
+    expect(doc.createdBy).toEqual({ uid: "uid-1", email: "a@kors.com" });
     expect(doc.form.clienteNombre).toBe("Ana");
     expect(doc.result.precioFinalCliente).toBe(125);
   });

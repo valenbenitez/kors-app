@@ -1,11 +1,20 @@
 "use client";
 
+import { signOut } from "firebase/auth";
 import { LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { getClientAuth } from "@/lib/firebase/client";
 
 export function AppHeader() {
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
+
+    try {
+      await signOut(getClientAuth());
+    } catch {
+      // Server cookie already cleared; continue to login.
+    }
+
     window.location.href = "/login";
   }
 

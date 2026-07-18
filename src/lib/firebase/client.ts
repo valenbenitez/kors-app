@@ -1,4 +1,5 @@
 import { type FirebaseApp, getApps, initializeApp } from "firebase/app";
+import { type Auth, getAuth } from "firebase/auth";
 import {
   connectFirestoreEmulator,
   type Firestore,
@@ -8,6 +9,7 @@ import { getFirebaseClientEnv, isFirestoreEmulator } from "@/lib/env";
 import { FirebaseConfigError, mapFirebaseError } from "@/lib/firebase/errors";
 
 let appSingleton: FirebaseApp | undefined;
+let authSingleton: Auth | undefined;
 let firestoreSingleton: Firestore | undefined;
 let emulatorConnected = false;
 
@@ -41,6 +43,26 @@ export function getFirebaseApp(): FirebaseApp {
       throw error;
     }
     mapFirebaseError(error, "getFirebaseApp");
+  }
+}
+
+/**
+ * Lazy singleton client Auth.
+ * Call only from client components / client-only modules (not Admin).
+ */
+export function getClientAuth(): Auth {
+  if (authSingleton) {
+    return authSingleton;
+  }
+
+  try {
+    authSingleton = getAuth(getFirebaseApp());
+    return authSingleton;
+  } catch (error) {
+    if (error instanceof FirebaseConfigError) {
+      throw error;
+    }
+    mapFirebaseError(error, "getClientAuth");
   }
 }
 

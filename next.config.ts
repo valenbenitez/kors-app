@@ -8,6 +8,7 @@ const nextConfig: NextConfig = {
     "@sparticuz/chromium",
     "puppeteer-core",
     "puppeteer",
+    "firebase-admin",
   ],
   outputFileTracingIncludes: {
     "/api/generate-pdf": [

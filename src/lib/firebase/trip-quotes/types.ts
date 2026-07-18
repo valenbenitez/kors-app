@@ -33,12 +33,21 @@ export const formulaResultSchema = z.object({
 
 export const tripQuoteStatusSchema = z.enum(TRIP_QUOTE_STATUSES);
 
+/** Authenticated user who generated the quote (audit). */
+export const tripQuoteCreatedBySchema = z.object({
+  uid: z.string().min(1),
+  email: z.string().min(1),
+});
+
+export type TripQuoteCreatedBy = z.infer<typeof tripQuoteCreatedBySchema>;
+
 /** Firestore payload before id / Date conversion. */
 export const tripQuoteFirestoreSchema = z.object({
   cotNumber: z.string().min(1),
   status: tripQuoteStatusSchema,
   createdAt: z.unknown(),
   updatedAt: z.unknown(),
+  createdBy: tripQuoteCreatedBySchema,
   form: cotizacionFormSchema,
   result: formulaResultSchema,
 });
@@ -49,6 +58,7 @@ export type TripQuoteDoc = {
   status: TripQuoteStatus;
   createdAt: Date;
   updatedAt: Date;
+  createdBy: TripQuoteCreatedBy;
   form: CotizacionFormInput;
   result: FormulaResult;
 };
@@ -59,4 +69,5 @@ export type CreateTripQuoteInput = {
   status: TripQuoteStatus;
   form: CotizacionFormInput;
   result: FormulaResult;
+  createdBy: TripQuoteCreatedBy;
 };

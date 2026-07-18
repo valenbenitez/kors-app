@@ -1,10 +1,7 @@
 import { NextResponse } from "next/server";
-import {
-  createSessionToken,
-  credentialsMatch,
-  setSessionCookie,
-} from "@/lib/auth/session";
-import { loginSchema } from "@/lib/validations/auth";
+import { createSessionToken, setSessionCookie } from "@/lib/auth/session";
+import { verifyIdToken } from "@/lib/firebase/admin";
+import { sessionExchangeSchema } from "@/lib/validations/auth";
 
 export async function POST(request: Request) {
   let body: unknown;
@@ -18,7 +15,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const parsed = loginSchema.safeParse(body);
+  const parsed = sessionExchangeSchema.safeParse(body);
 
   if (!parsed.success) {
     return NextResponse.json(
@@ -27,17 +24,17 @@ export async function POST(request: Request) {
     );
   }
 
-  const { email, password } = parsed.data;
+  const { idToken } = parsed.data;
 
-  if (!credentialsMatch(email, password)) {
+  try {
+    await verifyIdToken(idToken);
+    const sessionCookie = await createSessionToken(idToken);
+    await setSessionCookie(sessionCookie);
+    return NextResponse.json({ ok: true });
+  } catch {
     return NextResponse.json(
       { error: "Email o contraseña incorrectos" },
       { status: 401 },
     );
   }
-
-  const token = await createSessionToken(email);
-  await setSessionCookie(token);
-
-  return NextResponse.json({ ok: true });
 }

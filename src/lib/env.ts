@@ -2,9 +2,6 @@ import { z } from "zod";
 import { FirebaseConfigError } from "@/lib/firebase/errors";
 
 const envSchema = z.object({
-  AUTH_EMAIL: z.string().email(),
-  AUTH_PASSWORD: z.string().min(1),
-  SESSION_SECRET: z.string().min(32),
   PDF_RUNTIME: z.enum(["local", "serverless"]).default("local"),
   PUPPETEER_EXECUTABLE_PATH: z.string().optional(),
 });

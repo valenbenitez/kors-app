@@ -42,6 +42,7 @@ if (!emulatorHost) {
         status: "generated",
         form,
         result,
+        createdBy: { uid: "uid-emulator", email: "test@kors.com" },
       });
 
       expect(id).toBeTruthy();
@@ -50,6 +51,10 @@ if (!emulatorHost) {
       expect(loaded.id).toBe(id);
       expect(loaded.cotNumber).toBe("COT-0010");
       expect(loaded.status).toBe("generated");
+      expect(loaded.createdBy).toEqual({
+        uid: "uid-emulator",
+        email: "test@kors.com",
+      });
       expect(loaded.form.clienteNombre).toBe(form.clienteNombre);
       expect(loaded.result.precioFinalCliente).toBe(result.precioFinalCliente);
       expect(loaded.createdAt).toBeInstanceOf(Date);

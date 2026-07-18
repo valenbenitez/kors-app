@@ -51,6 +51,7 @@ export function parseTripQuoteDoc(
     status: parsed.data.status,
     createdAt: toDate(parsed.data.createdAt),
     updatedAt: toDate(parsed.data.updatedAt),
+    createdBy: parsed.data.createdBy,
     form: parsed.data.form,
     result: parsed.data.result,
   };
@@ -72,6 +73,7 @@ export async function createTripQuote(
       status: input.status,
       createdAt: now,
       updatedAt: now,
+      createdBy: input.createdBy,
       form: input.form,
       result: input.result,
     });

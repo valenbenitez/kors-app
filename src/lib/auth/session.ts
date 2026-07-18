@@ -1,4 +1,3 @@
-import { timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import {
   SESSION_COOKIE,
@@ -6,7 +5,7 @@ import {
   type SessionPayload,
   verifySessionToken,
 } from "@/lib/auth/token";
-import { getEnv } from "@/lib/env";
+import { revokeRefreshTokens } from "@/lib/firebase/admin";
 
 export {
   createSessionToken,
@@ -14,24 +13,6 @@ export {
   type SessionPayload,
   verifySessionToken,
 } from "@/lib/auth/token";
-
-export function credentialsMatch(email: string, password: string): boolean {
-  const env = getEnv();
-  return (
-    safeEqual(email, env.AUTH_EMAIL) && safeEqual(password, env.AUTH_PASSWORD)
-  );
-}
-
-function safeEqual(a: string, b: string): boolean {
-  const bufA = Buffer.from(a);
-  const bufB = Buffer.from(b);
-
-  if (bufA.length !== bufB.length) {
-    return false;
-  }
-
-  return timingSafeEqual(bufA, bufB);
-}
 
 export async function getSession(): Promise<SessionPayload | null> {
   const cookieStore = await cookies();
@@ -59,4 +40,21 @@ export async function setSessionCookie(token: string): Promise<void> {
 export async function clearSessionCookie(): Promise<void> {
   const cookieStore = await cookies();
   cookieStore.delete(SESSION_COOKIE);
+}
+
+/**
+ * Clears the session cookie and best-effort revokes Firebase refresh tokens.
+ */
+export async function destroySession(): Promise<void> {
+  const session = await getSession();
+
+  await clearSessionCookie();
+
+  if (session?.sub) {
+    try {
+      await revokeRefreshTokens(session.sub);
+    } catch {
+      // Cookie already cleared; revocation failure must not block logout.
+    }
+  }
 }
