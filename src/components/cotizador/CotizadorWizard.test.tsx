@@ -14,11 +14,21 @@ import { CotizadorWizard } from "@/components/cotizador/CotizadorWizard";
 
 const fetchMock = vi.fn<typeof fetch>();
 
-function pdfResponse(): Response {
+function pdfResponse(cotNumber = "COT-0042"): Response {
   return {
     ok: true,
     blob: async () => new Blob(["pdf"], { type: "application/pdf" }),
-    headers: { get: () => 'attachment; filename="cotizacion.pdf"' },
+    headers: {
+      get: (name: string) => {
+        if (name === "Content-Disposition") {
+          return `attachment; filename="${cotNumber}_cliente.pdf"`;
+        }
+        if (name === "X-Cotizacion-Numero") {
+          return cotNumber;
+        }
+        return null;
+      },
+    },
   } as unknown as Response;
 }
 
@@ -143,6 +153,19 @@ describe("CotizadorWizard — generación del PDF", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("tras descargar el PDF muestra banner de éxito con el número COT", async () => {
+    fetchMock.mockResolvedValue(pdfResponse("COT-0042"));
+    const user = userEvent.setup();
+    render(<CotizadorWizard />);
+
+    await goToFinalStep(user);
+    await user.click(screen.getByRole("button", { name: "Generar PDF" }));
+
+    const status = await screen.findByRole("status");
+    expect(status).toHaveTextContent("COT-0042");
+    expect(status).toHaveTextContent("descargó correctamente");
+  });
+
   it("doble click rápido en Generar PDF produce exactamente 1 petición", async () => {
     let resolveFetch: ((response: Response) => void) | undefined;
     fetchMock.mockImplementation(
@@ -186,5 +209,35 @@ describe("CotizadorWizard — generación del PDF", () => {
     await waitFor(() =>
       expect(screen.queryByRole("alert")).not.toBeInTheDocument(),
     );
+  });
+
+  it("toggle Ver preview llama a /api/preview-pdf y muestra el iframe", async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      text: async () => "<!DOCTYPE html><html><body>preview</body></html>",
+      headers: { get: () => null },
+    } as unknown as Response);
+    const user = userEvent.setup();
+    render(<CotizadorWizard />);
+
+    await goToFinalStep(user);
+    expect(
+      screen.getByRole("button", { name: "Ver preview" }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Ver preview" }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/preview-pdf",
+        expect.objectContaining({ method: "POST" }),
+      ),
+    );
+    expect(
+      await screen.findByTitle("Vista previa del PDF"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Ocultar preview" }),
+    ).toBeInTheDocument();
   });
 });

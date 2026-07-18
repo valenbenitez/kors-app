@@ -10,6 +10,7 @@ import {
   useWatch,
 } from "react-hook-form";
 import { MoneyField } from "@/components/cotizador/MoneyField";
+import { PdfPreview } from "@/components/pdf/PdfPreview";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -40,10 +41,21 @@ import {
 } from "@/lib/validations/cotizacion";
 
 const STEPS = [
-  "Cliente + viaje",
-  "Costos por destino",
-  "Confirmación",
+  { full: "Cliente + viaje", short: "Cliente" },
+  { full: "Costos por destino", short: "Costos" },
+  { full: "Confirmación", short: "Confirmar" },
 ] as const;
+
+function cotNumberFromDownload(
+  headerValue: string | null,
+  filename: string,
+): string | null {
+  if (headerValue?.match(/^COT-\d+$/i)) {
+    return headerValue.toUpperCase();
+  }
+  const fromName = filename.match(/COT-\d+/i);
+  return fromName ? fromName[0].toUpperCase() : null;
+}
 
 /** Money fields cleared when destination currency changes (no silent re-interpretation). */
 const DESTINO_MONEY_FIELDS = [
@@ -80,8 +92,10 @@ function moneyDec(n: number) {
 export function CotizadorWizard() {
   const [step, setStep] = useState(0);
   const [serverError, setServerError] = useState<string | null>(null);
+  const [downloadSuccess, setDownloadSuccess] = useState<string | null>(null);
   const [preview, setPreview] = useState<FormulaResult | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [showPdfPreview, setShowPdfPreview] = useState(false);
   // Per-destination search query; filtering the list does not clear excursionIds.
   const [excursionQueries, setExcursionQueries] = useState<
     Record<string, string>
@@ -160,6 +174,7 @@ export function CotizadorWizard() {
 
   async function goNext() {
     setServerError(null);
+    setDownloadSuccess(null);
     if (step === 0) {
       const ok = await trigger([
         "clienteNombre",
@@ -203,6 +218,7 @@ export function CotizadorWizard() {
     if (isGeneratingRef.current) return;
     isGeneratingRef.current = true;
     setServerError(null);
+    setDownloadSuccess(null);
     setIsGenerating(true);
     try {
       const response = await fetch("/api/generate-pdf", {
@@ -215,7 +231,10 @@ export function CotizadorWizard() {
         const data = (await response.json().catch(() => null)) as {
           error?: string;
         } | null;
-        setServerError(data?.error ?? "No se pudo generar el PDF");
+        setServerError(
+          data?.error ??
+            "No se pudo generar el PDF. Revisá los datos e intentá de nuevo.",
+        );
         return;
       }
 
@@ -224,12 +243,21 @@ export function CotizadorWizard() {
       const a = document.createElement("a");
       const disposition = response.headers.get("Content-Disposition");
       const match = disposition?.match(/filename="(.+)"/);
+      const filename = match?.[1] ?? "cotizacion.pdf";
       a.href = url;
-      a.download = match?.[1] ?? "cotizacion.pdf";
+      a.download = filename;
       a.click();
       URL.revokeObjectURL(url);
+
+      const cotNumber = cotNumberFromDownload(
+        response.headers.get("X-Cotizacion-Numero"),
+        filename,
+      );
+      setDownloadSuccess(cotNumber ?? "listo");
     } catch {
-      setServerError("Error de red al generar el PDF");
+      setServerError(
+        "No se pudo conectar al generar el PDF. Revisá tu conexión e intentá de nuevo.",
+      );
     } finally {
       isGeneratingRef.current = false;
       setIsGenerating(false);
@@ -237,9 +265,9 @@ export function CotizadorWizard() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-8">
+    <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6 sm:py-8">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">
+        <h1 className="text-2xl font-semibold tracking-tight text-primary">
           Nueva cotización
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -247,19 +275,25 @@ export function CotizadorWizard() {
         </p>
       </header>
 
-      <nav className="flex gap-2">
+      <nav aria-label="Pasos del cotizador" className="flex gap-1.5 sm:gap-2">
         {STEPS.map((label, index) => (
           <div
-            key={label}
-            className={`flex-1 rounded-2xl border px-3 py-2 text-center text-xs font-medium ${
+            key={label.full}
+            aria-current={index === step ? "step" : undefined}
+            className={`flex-1 rounded-2xl border px-2 py-2 text-center text-xs font-medium sm:px-3 ${
               index === step
-                ? "border-primary bg-primary/10 text-foreground"
+                ? "border-primary bg-primary text-primary-foreground"
                 : index < step
-                  ? "border-border bg-muted text-foreground"
+                  ? "border-accent/40 bg-accent/15 text-foreground"
                   : "border-border text-muted-foreground"
             }`}
           >
-            {index + 1}. {label}
+            <span className="md:hidden">
+              {index + 1}. {label.short}
+            </span>
+            <span className="hidden md:inline">
+              {index + 1}. {label.full}
+            </span>
           </div>
         ))}
       </nav>
@@ -624,8 +658,8 @@ export function CotizadorWizard() {
                       </p>
                     ) : options.length === 0 ? (
                       <p className="text-sm text-muted-foreground">
-                        No hay excursiones activas vigentes para este
-                        destino/fecha.
+                        No hay excursiones vigentes para esta fecha. Probá otra
+                        fecha de ida o continuá sin excursiones.
                       </p>
                     ) : (
                       <>
@@ -768,7 +802,38 @@ export function CotizadorWizard() {
           </p>
         ) : null}
 
-        <div className="mt-6 flex justify-between gap-3">
+        {downloadSuccess ? (
+          <output className="mt-4 block rounded-2xl border border-success/25 bg-success/10 px-3 py-2.5 text-sm text-success">
+            {downloadSuccess === "listo" ? (
+              "PDF descargado correctamente."
+            ) : (
+              <>
+                PDF listo ·{" "}
+                <span className="font-semibold">{downloadSuccess}</span> se
+                descargó correctamente.
+              </>
+            )}
+          </output>
+        ) : null}
+
+        {step === 2 ? (
+          <>
+            <div className="mt-4">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isGenerating}
+                aria-expanded={showPdfPreview}
+                onClick={() => setShowPdfPreview((open) => !open)}
+              >
+                {showPdfPreview ? "Ocultar preview" : "Ver preview"}
+              </Button>
+            </div>
+            <PdfPreview formValues={getValues()} open={showPdfPreview} />
+          </>
+        ) : null}
+
+        <div className="mt-6 flex flex-wrap justify-between gap-3">
           <Button
             type="button"
             variant="outline"

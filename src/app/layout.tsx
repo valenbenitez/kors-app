@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Kors App",
-  description: "Dashboard for KORS agencies",
+  title: "KORS · Cotizador Madero",
+  description: "Cotizador de viajes para vendedores Madero",
 };
 
 export default function RootLayout({
@@ -27,7 +27,7 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      lang="es"
       className={cn(
         "h-full",
         "antialiased",
