@@ -4,6 +4,8 @@ const nextConfig: NextConfig = {
   /* config options here */
   reactCompiler: true,
 
+  // firebase-admin is externalized (require). jwks-rsa@4 needs jose CJS —
+  // pin via pnpm-workspace.yaml override `jwks-rsa>jose` → 4.15.9 (jose@6 is ESM-only).
   serverExternalPackages: [
     "@sparticuz/chromium",
     "puppeteer-core",

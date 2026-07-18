@@ -8,3 +8,6 @@ ignoredBuiltDependencies:
   - protobufjs
   - sharp
   - unrs-resolver
+# firebase-admin → jwks-rsa requires jose CJS; jose@6 is ESM-only (ERR_REQUIRE_ESM on Vercel).
+overrides:
+  jwks-rsa>jose: 4.15.9
