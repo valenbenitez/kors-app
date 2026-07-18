@@ -254,12 +254,9 @@ export function CotizadorWizard() {
 
       <form
         onSubmit={(event) => {
-          // Solo el paso final genera el PDF: Enter en pasos previos es no-op.
-          if (step !== 2) {
-            event.preventDefault();
-            return;
-          }
-          void handleSubmit(onGenerate)(event);
+          // Nunca generar por submit nativo: evita race Continuar→submit al
+          // cambiar el botón de type="button" a type="submit" en el mismo click.
+          event.preventDefault();
         }}
         className="rounded-4xl border border-border bg-card p-6 shadow-sm"
         noValidate
@@ -764,7 +761,11 @@ export function CotizadorWizard() {
               Continuar
             </Button>
           ) : (
-            <Button type="submit" disabled={isGenerating}>
+            <Button
+              type="button"
+              disabled={isGenerating}
+              onClick={() => void handleSubmit(onGenerate)()}
+            >
               {isGenerating ? (
                 <>
                   <Loader2 className="animate-spin" />

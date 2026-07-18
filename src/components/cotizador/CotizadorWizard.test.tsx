@@ -114,6 +114,17 @@ describe("CotizadorWizard — generación del PDF", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("submit nativo en el paso final no llama a /api/generate-pdf", async () => {
+    const user = userEvent.setup();
+    render(<CotizadorWizard />);
+
+    await goToFinalStep(user);
+    fireEvent.submit(getForm());
+    await settle();
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("con formulario válido, click en Generar PDF llama exactamente 1 vez a fetch", async () => {
     fetchMock.mockResolvedValue(pdfResponse());
     const user = userEvent.setup();

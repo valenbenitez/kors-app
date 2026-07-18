@@ -110,6 +110,63 @@ describe("calcularCotizacion — políticas de menores (excursiones)", () => {
       }),
     ).toThrow(FormulaError);
   });
+
+  it("Precio especial + precioMenor null + no minors → succeeds (adults only)", () => {
+    const result = calcularCotizacion({
+      paxAdultos: 2,
+      paxMenores: 0,
+      metodoPago: "efectivo",
+      destinos: [
+        {
+          destino: "Bariloche",
+          vueloIdaAdultoArs: 0,
+          vueloIdaMenorArs: 0,
+          vueloVueltaAdultoArs: 0,
+          vueloVueltaMenorArs: 0,
+          hotelAdultoArs: 0,
+          hotelMenorArs: 0,
+          excursiones: [
+            baseExc({
+              neto: 100,
+              precioMenor: null,
+              politicaMenores: "Precio especial",
+            }),
+          ],
+        },
+      ],
+    });
+
+    expect(result.subtotalUsd).toBe(200);
+    expect(result.subtotalMenoresUsd).toBe(0);
+  });
+
+  it("Precio especial + precioMenor null + minors → throws FormulaError", () => {
+    expect(() =>
+      calcularCotizacion({
+        paxAdultos: 1,
+        paxMenores: 1,
+        metodoPago: "efectivo",
+        destinos: [
+          {
+            destino: "Bariloche",
+            vueloIdaAdultoArs: 0,
+            vueloIdaMenorArs: 0,
+            vueloVueltaAdultoArs: 0,
+            vueloVueltaMenorArs: 0,
+            hotelAdultoArs: 0,
+            hotelMenorArs: 0,
+            excursiones: [
+              baseExc({
+                neto: 100,
+                precioMenor: null,
+                politicaMenores: "Precio especial",
+              }),
+            ],
+          },
+        ],
+      }),
+    ).toThrow(FormulaError);
+  });
 });
 
 describe("calcularCotizacion — pasos 4→9 desde costo neto (COT-0010)", () => {

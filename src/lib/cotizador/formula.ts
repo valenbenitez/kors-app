@@ -106,8 +106,11 @@ function calcularNetoExcursion(
       return { netoAdultoUsd, netoMenorUsd: netoAdultoUsd };
     case "Precio especial": {
       if (exc.precioMenor === null) {
+        if (paxMenores === 0) {
+          return { netoAdultoUsd, netoMenorUsd: new Decimal(0) };
+        }
         throw new FormulaError(
-          `Excursión "${exc.nombre}" con "Precio especial" pero sin Precio menor cargado`,
+          `Excursion "${exc.nombre}" has "Precio especial" but no minor price loaded`,
         );
       }
       return {
