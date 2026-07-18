@@ -1,14 +1,18 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { defaultPdfTheme } from "@/lib/pdf/theme";
 
-/** Logo Madero embebido como data URL (Puppeteer no depende de HTTP). */
-let cachedLogoDataUrl: string | null = null;
+/** Logo embedded as data URL (Puppeteer does not depend on HTTP). */
+const logoCache = new Map<string, string>();
 
-export function getLogoDataUrl(): string {
-  if (cachedLogoDataUrl) return cachedLogoDataUrl;
-  const buf = readFileSync(
-    join(process.cwd(), "public/assets/brand/logo_madero.png"),
-  );
-  cachedLogoDataUrl = `data:image/png;base64,${buf.toString("base64")}`;
-  return cachedLogoDataUrl;
+export function getLogoDataUrl(
+  path: string = defaultPdfTheme.logo.path,
+): string {
+  const cached = logoCache.get(path);
+  if (cached) return cached;
+
+  const buf = readFileSync(join(process.cwd(), path));
+  const dataUrl = `data:image/png;base64,${buf.toString("base64")}`;
+  logoCache.set(path, dataUrl);
+  return dataUrl;
 }

@@ -36,7 +36,9 @@ export const EQUIPAJES = [
 
 export const HOTEL_CATEGORIAS = ["3★", "4★", "5★"] as const;
 
-export const MONEDAS = ["ARS", "USD"] as const;
+export const MONEDAS = ["CLP", "ARS", "COP", "PIX", "USD", "PEN"] as const;
+
+export type FormMoneda = (typeof MONEDAS)[number];
 
 const destinoFormSchema = z.object({
   destino: z.enum(DESTINOS),

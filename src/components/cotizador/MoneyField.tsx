@@ -2,21 +2,34 @@
 
 import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
+import type { FormMoneda } from "@/lib/validations/cotizacion";
 
-type Currency = "ARS" | "USD";
+/** Decimal places and UI prefix per destination cost currency. */
+export const CURRENCY_UI: Record<
+  FormMoneda,
+  { decimals: number; prefix: string }
+> = {
+  USD: { decimals: 2, prefix: "US$" },
+  PIX: { decimals: 2, prefix: "R$" },
+  PEN: { decimals: 2, prefix: "S/" },
+  ARS: { decimals: 0, prefix: "$" },
+  CLP: { decimals: 0, prefix: "$" },
+  COP: { decimals: 0, prefix: "$" },
+};
 
 function parseAndFormat(
   raw: string,
-  currency: Currency,
+  currency: FormMoneda,
   allowNegative: boolean,
 ): { display: string; value: number } {
-  const allowDecimals = currency === "USD";
+  const { decimals } = CURRENCY_UI[currency];
+  const allowDecimals = decimals > 0;
   const negative = allowNegative && raw.trim().startsWith("-");
   const cleaned = raw.replace(/[^\d,]/g, "");
   const [intRaw = "", ...rest] = cleaned.split(",");
   const intDigits = intRaw.replace(/^0+(?=\d)/, "");
   const hasComma = allowDecimals && rest.length > 0;
-  const decDigits = hasComma ? rest.join("").slice(0, 2) : "";
+  const decDigits = hasComma ? rest.join("").slice(0, decimals) : "";
 
   if (intDigits === "" && decDigits === "" && !hasComma) {
     return { display: negative ? "-" : "", value: 0 };
@@ -35,10 +48,10 @@ function parseAndFormat(
   return { display, value: Number(numericStr) || 0 };
 }
 
-function formatValue(value: number, currency: Currency): string {
+function formatValue(value: number, currency: FormMoneda): string {
   if (!value) return "";
   return value.toLocaleString("es-AR", {
-    maximumFractionDigits: currency === "USD" ? 2 : 0,
+    maximumFractionDigits: CURRENCY_UI[currency].decimals,
   });
 }
 
@@ -52,7 +65,7 @@ export function MoneyField({
 }: {
   id?: string;
   value: number;
-  currency: Currency;
+  currency: FormMoneda;
   onValueChange: (value: number) => void;
   placeholder?: string;
   allowNegative?: boolean;
@@ -71,7 +84,7 @@ export function MoneyField({
   return (
     <div className="relative">
       <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground">
-        {currency === "USD" ? "US$" : "$"}
+        {CURRENCY_UI[currency].prefix}
       </span>
       <Input
         id={id}

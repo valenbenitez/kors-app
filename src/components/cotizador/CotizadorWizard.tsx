@@ -34,6 +34,7 @@ import {
   emptyDestino,
   HOTEL_CATEGORIAS,
   METODOS_PAGO,
+  MONEDAS,
   PAISES,
   PERFILES,
 } from "@/lib/validations/cotizacion";
@@ -42,6 +43,17 @@ const STEPS = [
   "Cliente + viaje",
   "Costos por destino",
   "Confirmación",
+] as const;
+
+/** Money fields cleared when destination currency changes (no silent re-interpretation). */
+const DESTINO_MONEY_FIELDS = [
+  "vueloIdaAdultoArs",
+  "vueloIdaMenorArs",
+  "vueloVueltaAdultoArs",
+  "vueloVueltaMenorArs",
+  "hotelAdultoArs",
+  "hotelMenorArs",
+  "hotelAjusteArs",
 ] as const;
 
 function FieldError({ message }: { message?: string }) {
@@ -459,17 +471,26 @@ export function CotizadorWizard() {
                 >
                   <div className="flex items-center justify-between gap-3">
                     <h2 className="text-lg font-semibold">{destino}</h2>
-                    <div className="inline-flex rounded-full border border-border p-0.5">
-                      {(["ARS", "USD"] as const).map((m) => (
+                    <div className="inline-flex flex-wrap justify-end gap-0.5 rounded-full border border-border p-0.5">
+                      {MONEDAS.map((m) => (
                         <button
                           key={m}
                           type="button"
-                          onClick={() =>
+                          onClick={() => {
+                            if (m === moneda) return;
+                            // Policy: clear amounts on currency change so Zod
+                            // stays valid and values are never left in the
+                            // previous currency without conversion.
                             setValue(`destinos.${index}.moneda`, m, {
                               shouldValidate: true,
-                            })
-                          }
-                          className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+                            });
+                            for (const field of DESTINO_MONEY_FIELDS) {
+                              setValue(`destinos.${index}.${field}`, 0, {
+                                shouldValidate: true,
+                              });
+                            }
+                          }}
+                          className={`rounded-full px-2.5 py-1 text-xs font-medium transition ${
                             moneda === m
                               ? "bg-primary text-primary-foreground"
                               : "text-muted-foreground hover:text-foreground"

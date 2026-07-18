@@ -1,11 +1,37 @@
+import Decimal from "decimal.js";
 import { catalog } from "@/lib/cotizador/catalog";
 import type {
   CotizacionInput,
   DestinoCostInput,
   ExcursionInput,
 } from "@/lib/cotizador/formula";
-import { FORMULA_PARAMS } from "@/lib/cotizador/params";
-import type { CotizacionFormInput } from "@/lib/validations/cotizacion";
+import {
+  FORMULA_PARAMS,
+  FX_RATES_TO_USD,
+  type FxCurrency,
+} from "@/lib/cotizador/params";
+import type {
+  CotizacionFormInput,
+  FormMoneda,
+} from "@/lib/validations/cotizacion";
+
+Decimal.set({ precision: 28, rounding: Decimal.ROUND_HALF_UP });
+
+/**
+ * Converts an amount in `moneda` to ARS-equivalent for the formula layer.
+ * Path: local → USD (÷ rate) → ARS (× tcArsUsd), all via Decimal.
+ */
+export function amountToArs(amount: number, moneda: FormMoneda): number {
+  const rate = FX_RATES_TO_USD[moneda as FxCurrency];
+  const tc = new Decimal(FORMULA_PARAMS.tcArsUsd);
+  return new Decimal(amount).div(rate).times(tc).toNumber();
+}
+
+/** Converts local currency amount to USD using the FX map (Decimal). */
+export function amountToUsd(amount: number, moneda: FormMoneda): number {
+  const rate = FX_RATES_TO_USD[moneda as FxCurrency];
+  return new Decimal(amount).div(rate).toNumber();
+}
 
 export function resolveExcursions(ids: string[]): ExcursionInput[] {
   return ids.map((id) => {
@@ -25,14 +51,8 @@ export function resolveExcursions(ids: string[]): ExcursionInput[] {
 }
 
 export function formToFormulaInput(form: CotizacionFormInput): CotizacionInput {
-  const tc = FORMULA_PARAMS.tcArsUsd;
-
   const destinos: DestinoCostInput[] = form.destinos.map((d) => {
-    // Los costos de vuelo/hotel se cargan en la moneda elegida por destino.
-    // La fórmula trabaja en ARS: si el operador cargó en USD lo llevamos a
-    // ARS-equivalente (× TC); la fórmula luego divide por TC.
-    const toArs = (amount: number) =>
-      d.moneda === "USD" ? amount * tc : amount;
+    const toArs = (amount: number) => amountToArs(amount, d.moneda);
 
     return {
       destino: d.destino,

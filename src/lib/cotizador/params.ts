@@ -13,6 +13,24 @@ export const FORMULA_PARAMS = {
   hotelAdjustmentAppliesTo: "adulto" as const,
 } as const;
 
+/**
+ * Units of local currency per 1 USD (amount ÷ rate → USD).
+ *
+ * - USD / ARS: production values (ARS must equal `FORMULA_PARAMS.tcArsUsd`).
+ * - CLP / COP / PIX / PEN: placeholders until ops provides live TC.
+ * - PIX is a quote currency code (BRL-equivalent), not a payment rail.
+ */
+export const FX_RATES_TO_USD = {
+  USD: 1,
+  ARS: FORMULA_PARAMS.tcArsUsd,
+  CLP: 950,
+  COP: 4100,
+  PIX: 5.5,
+  PEN: 3.75,
+} as const;
+
+export type FxCurrency = keyof typeof FX_RATES_TO_USD;
+
 export type PaymentMethod = "tarjeta" | "beetransfer" | "efectivo";
 
 export function feeMultiplier(method: PaymentMethod): number {

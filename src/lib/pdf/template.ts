@@ -3,7 +3,6 @@ import { type CatalogExcursion, catalog } from "@/lib/cotizador/catalog";
 import { cleanExcursionTitle } from "@/lib/cotizador/clean-title";
 import {
   addDaysIso,
-  CONTACT,
   feeMultiplierLabel,
   formatDateEs,
   formatDateShortMonth,
@@ -16,6 +15,7 @@ import {
 } from "@/lib/cotizador/format";
 import type { FormulaResult } from "@/lib/cotizador/formula";
 import { getLogoDataUrl } from "@/lib/pdf/logo";
+import { mergePdfTheme, type PdfThemeOverride } from "@/lib/pdf/theme";
 import type { CotizacionFormInput } from "@/lib/validations/cotizacion";
 
 export type PdfTag = {
@@ -39,6 +39,8 @@ export type PdfRenderData = {
   guideSubtitle?: string;
   /** Precios USD/pax forzados por id de excursión (fixture) */
   experiencePricesUsd?: Record<string, number>;
+  /** Partial PDF theme override (colors, fonts, brand, footer, logo). */
+  theme?: PdfThemeOverride;
 };
 
 function escapeHtml(value: string): string {
@@ -231,7 +233,9 @@ export function renderPdfHtml(data: PdfRenderData): string {
       dest?.hotelAjusteRazon || null,
     ].filter((x): x is string => Boolean(x));
 
-  const logo = getLogoDataUrl();
+  const theme = mergePdfTheme(data.theme);
+  const { brandName, colors, fonts, footer } = theme;
+  const logo = getLogoDataUrl(theme.logo.path);
   const feeLabel = feeMultiplierLabel(form.metodoPago);
 
   const excursionRows = (dest?.excursionIds ?? [])
@@ -301,15 +305,15 @@ export function renderPdfHtml(data: PdfRenderData): string {
 <html lang="es">
 <head>
 <meta charset="utf-8" />
-<title>${escapeHtml(cotNumber)} · ${escapeHtml(destino.toUpperCase())} · ${CONTACT.brand}</title>
+<title>${escapeHtml(cotNumber)} · ${escapeHtml(destino.toUpperCase())} · ${escapeHtml(brandName)}</title>
 <style>
   @page { size: A4; margin: 0; }
   * { box-sizing: border-box; }
   body {
     margin: 0;
-    font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
-    color: #1a2438;
-    background: #fff;
+    font-family: var(--font-body);
+    color: var(--text);
+    background: var(--bg);
     font-size: 10.5px;
     line-height: 1.45;
     -webkit-print-color-adjust: exact;
@@ -326,17 +330,21 @@ export function renderPdfHtml(data: PdfRenderData): string {
   .page:last-child { page-break-after: auto; }
 
   :root {
-    --navy: #1a2b4c;
-    --navy-deep: #122038;
-    --gold: #c5a059;
-    --gold-bright: #d4a84b;
-    --cream: #f7f3eb;
-    --cream-soft: #fbf8f2;
-    --muted: #5c667a;
-    --line: #e4dfd4;
-    --ok: #2f7a4f;
-    --no: #b33a3a;
-    --orange-bar: #d4883a;
+    --navy: ${colors.navy};
+    --navy-deep: ${colors.navyDeep};
+    --gold: ${colors.gold};
+    --gold-bright: ${colors.goldBright};
+    --cream: ${colors.cream};
+    --cream-soft: ${colors.creamSoft};
+    --muted: ${colors.muted};
+    --line: ${colors.line};
+    --ok: ${colors.ok};
+    --no: ${colors.no};
+    --orange-bar: ${colors.orangeBar};
+    --text: ${colors.text};
+    --bg: ${colors.background};
+    --font-body: ${fonts.body};
+    --font-display: ${fonts.display};
   }
 
   .hero {
@@ -352,7 +360,7 @@ export function renderPdfHtml(data: PdfRenderData): string {
   .hero-logo { height: 28px; width: auto; display: block; margin-bottom: 10px; filter: brightness(0) invert(1); }
   .hero-hello { font-size: 13px; font-weight: 400; opacity: 0.95; margin: 0 0 4px; }
   .hero-dest {
-    font-family: Georgia, "Times New Roman", serif;
+    font-family: var(--font-display);
     font-size: 42px;
     font-weight: 700;
     letter-spacing: 0.04em;
@@ -369,7 +377,7 @@ export function renderPdfHtml(data: PdfRenderData): string {
     border: 1px solid rgba(255,255,255,0.18);
     white-space: nowrap;
   }
-  .tag.accent { background: var(--gold); color: #1a2b4c; border-color: var(--gold); font-weight: 700; }
+  .tag.accent { background: var(--gold); color: var(--navy); border-color: var(--gold); font-weight: 700; }
   .hero-price { text-align: right; }
   .hero-price .pp-label {
     font-size: 10px;
@@ -379,7 +387,7 @@ export function renderPdfHtml(data: PdfRenderData): string {
     font-weight: 700;
   }
   .hero-price .pp-value {
-    font-family: Georgia, "Times New Roman", serif;
+    font-family: var(--font-display);
     font-size: 36px;
     color: var(--gold-bright);
     font-weight: 700;
@@ -443,7 +451,7 @@ export function renderPdfHtml(data: PdfRenderData): string {
     flex-shrink: 0;
   }
   .hotel-name {
-    font-family: Georgia, "Times New Roman", serif;
+    font-family: var(--font-display);
     font-size: 16px;
     font-weight: 700;
     color: var(--navy);
@@ -752,7 +760,7 @@ export function renderPdfHtml(data: PdfRenderData): string {
   <section class="page">
     <div class="hero">
       <div>
-        <img class="hero-logo" src="${logo}" alt="${CONTACT.brand}" />
+        <img class="hero-logo" src="${logo}" alt="${escapeHtml(brandName)}" />
         <p class="hero-hello">Hola, ${escapeHtml(firstName(form.clienteNombre))} — tu propuesta está lista 🎉</p>
         <div class="hero-dest">${escapeHtml(destino.toUpperCase())}</div>
         <div class="hero-loc">📍 ${escapeHtml(locationLabel)}</div>
@@ -906,15 +914,15 @@ export function renderPdfHtml(data: PdfRenderData): string {
     </div>
 
     <div class="footer-bar">
-      <span><img src="${logo}" alt="" /> ${CONTACT.brand}</span>
-      <span>${CONTACT.whatsapp.replaceAll("-", " ")}</span>
+      <span><img src="${logo}" alt="" /> ${escapeHtml(brandName)}</span>
+      <span>${escapeHtml(footer.whatsapp.replaceAll("-", " "))}</span>
     </div>
   </section>
 
   <section class="page page-pad-bottom">
     <div class="p3-header">
       <div>
-        <div class="brand-line">${CONTACT.brand}</div>
+        <div class="brand-line">${escapeHtml(brandName)}</div>
         <div style="font-size:10px;opacity:.85;margin-top:2px">Guía + Asesoría · ${escapeHtml(destino.toUpperCase())}</div>
       </div>
       <div class="meta">
@@ -932,19 +940,19 @@ export function renderPdfHtml(data: PdfRenderData): string {
     <div class="cta-box">
       <h2>¿Querés una asesoría personalizada?</h2>
       <p>Agendá una videollamada con un asesor Madero (15–20 minutos, sin costo). Ajustamos detalles, resolvemos dudas y aseguramos la mejor experiencia para tu viaje.</p>
-      <a class="btn" href="${CONTACT.calendly}">📅 Reservar reunión Meet → ${CONTACT.calendly}</a>
+      <a class="btn" href="${escapeHtml(footer.calendly)}">📅 Reservar reunión Meet → ${escapeHtml(footer.calendly)}</a>
     </div>
 
     <div class="contact-box">
       <h3>Contacto directo</h3>
-      <div class="line">💬 WhatsApp: ${CONTACT.whatsapp}</div>
-      <div class="line">✉ ${CONTACT.email}</div>
-      <div class="brand-line">${CONTACT.brand} · EVT ${CONTACT.evt} · ${CONTACT.city}</div>
+      <div class="line">💬 WhatsApp: ${escapeHtml(footer.whatsapp)}</div>
+      <div class="line">✉ ${escapeHtml(footer.email)}</div>
+      <div class="brand-line">${escapeHtml(brandName)} · EVT ${escapeHtml(footer.evt)} · ${escapeHtml(footer.city)}</div>
     </div>
 
     <div class="footer-bar">
-      <span><img src="${logo}" alt="" /> ${CONTACT.brand}</span>
-      <span>${CONTACT.whatsapp} · ${CONTACT.email}</span>
+      <span><img src="${logo}" alt="" /> ${escapeHtml(brandName)}</span>
+      <span>${escapeHtml(footer.whatsapp)} · ${escapeHtml(footer.email)}</span>
     </div>
   </section>
 </body>
