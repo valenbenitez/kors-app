@@ -44,6 +44,9 @@ const destinoOptionEnum = z.enum(
   DESTINO_OPTIONS as unknown as [DestinoOption, ...DestinoOption[]],
 );
 
+/** Optional string with empty default — missing keys from Firestore stay valid. */
+const optionalText = z.string().default("");
+
 const destinoFormSchema = z.object({
   destino: destinoOptionEnum,
   moneda: z.enum(MONEDAS),
@@ -58,11 +61,24 @@ const destinoFormSchema = z.object({
   hotelRegimen: z.string(),
   hotelUbicacion: z.string(),
   hotelHabitacion: z.string(),
+  /** Free-text hotel inclusions (PDF / prefill). Optional for back-compat. */
+  hotelIncluye: optionalText,
+  /** Free-text hotel exclusions (PDF / prefill). Optional for back-compat. */
+  hotelExcluye: optionalText,
+  /** Free-text hotel conditions (PDF highlights / prefill). Optional for back-compat. */
+  hotelCondiciones: optionalText,
   hotelAjusteArs: z.coerce.number(),
   hotelAjusteRazon: z.string(),
   excursionIds: z.array(z.string()),
 });
 
+/**
+ * Flight segment fields are trip-level (flat), not nested under destino.
+ * Airline stays trip-level as `aerolinea`. All segment fields are optional
+ * (default "") so existing quotes and partial AI prefill remain valid.
+ * Trip dates `fechaIda` / `fechaVuelta` stay required; segment dates are
+ * independent and only cross-checked when both are non-empty.
+ */
 export const cotizacionFormSchema = z
   .object({
     clienteNombre: z.string().min(2, "Ingresá el nombre del cliente"),
@@ -80,6 +96,18 @@ export const cotizacionFormSchema = z
     metodoPago: z.enum(METODOS_PAGO),
     equipaje: z.enum(EQUIPAJES),
     aerolinea: z.string(),
+    vueloIdaFecha: optionalText,
+    vueloIdaHoraSalida: optionalText,
+    vueloIdaHoraLlegada: optionalText,
+    vueloIdaNumero: optionalText,
+    vueloIdaAeropuertoSalida: optionalText,
+    vueloIdaAeropuertoLlegada: optionalText,
+    vueloVueltaFecha: optionalText,
+    vueloVueltaHoraSalida: optionalText,
+    vueloVueltaHoraLlegada: optionalText,
+    vueloVueltaNumero: optionalText,
+    vueloVueltaAeropuertoSalida: optionalText,
+    vueloVueltaAeropuertoLlegada: optionalText,
     itinerario: z.string(),
     destinos: z.array(destinoFormSchema).min(1),
   })
@@ -89,6 +117,17 @@ export const cotizacionFormSchema = z
         code: "custom",
         message: "La fecha de vuelta debe ser posterior a la ida",
         path: ["fechaVuelta"],
+      });
+    }
+    if (
+      data.vueloIdaFecha &&
+      data.vueloVueltaFecha &&
+      data.vueloVueltaFecha < data.vueloIdaFecha
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        message: "La fecha de vuelo de vuelta debe ser posterior a la de ida",
+        path: ["vueloVueltaFecha"],
       });
     }
     if (data.paxMenores > 0 && data.edadesMenores.length !== data.paxMenores) {
@@ -125,6 +164,9 @@ export function emptyDestino(destino: DestinoOption): DestinoFormInput {
     hotelRegimen: "",
     hotelUbicacion: "",
     hotelHabitacion: "",
+    hotelIncluye: "",
+    hotelExcluye: "",
+    hotelCondiciones: "",
     hotelAjusteArs: 0,
     hotelAjusteRazon: "",
     excursionIds: [],
@@ -145,6 +187,18 @@ export const defaultCotizacionValues: CotizacionFormInput = {
   metodoPago: "tarjeta",
   equipaje: "carry-on",
   aerolinea: "",
+  vueloIdaFecha: "",
+  vueloIdaHoraSalida: "",
+  vueloIdaHoraLlegada: "",
+  vueloIdaNumero: "",
+  vueloIdaAeropuertoSalida: "",
+  vueloIdaAeropuertoLlegada: "",
+  vueloVueltaFecha: "",
+  vueloVueltaHoraSalida: "",
+  vueloVueltaHoraLlegada: "",
+  vueloVueltaNumero: "",
+  vueloVueltaAeropuertoSalida: "",
+  vueloVueltaAeropuertoLlegada: "",
   itinerario: "",
   destinos: [emptyDestino("Misiones")],
 };

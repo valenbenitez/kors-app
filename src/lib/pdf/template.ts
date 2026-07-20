@@ -90,6 +90,75 @@ function experienceDetail(exc: CatalogExcursion): string {
   return exc.proveedor?.trim() ? `proveedor ${exc.proveedor.trim()}` : "";
 }
 
+/** Split free-text hotel fields into non-empty lines for PDF lists. */
+function textLines(value: string | undefined): string[] {
+  if (!value?.trim()) return [];
+  return value
+    .split(/\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+type FlightLeg = "ida" | "vuelta";
+
+function flightLegFields(form: CotizacionFormInput, leg: FlightLeg) {
+  const prefix = leg === "ida" ? "vueloIda" : "vueloVuelta";
+  return {
+    fecha: form[`${prefix}Fecha`],
+    horaSalida: form[`${prefix}HoraSalida`],
+    horaLlegada: form[`${prefix}HoraLlegada`],
+    numero: form[`${prefix}Numero`],
+    aeropuertoSalida: form[`${prefix}AeropuertoSalida`],
+    aeropuertoLlegada: form[`${prefix}AeropuertoLlegada`],
+  };
+}
+
+function hasStructuredFlightLeg(
+  form: CotizacionFormInput,
+  leg: FlightLeg,
+): boolean {
+  const f = flightLegFields(form, leg);
+  return Boolean(
+    f.numero.trim() ||
+      f.aeropuertoSalida.trim() ||
+      f.aeropuertoLlegada.trim() ||
+      f.horaSalida.trim() ||
+      f.horaLlegada.trim() ||
+      f.fecha.trim(),
+  );
+}
+
+function formatFlightLegLine(
+  form: CotizacionFormInput,
+  leg: FlightLeg,
+  airline: string,
+): string {
+  const f = flightLegFields(form, leg);
+  const label = leg === "ida" ? "Vuelo ida" : "Vuelo vuelta";
+  const flightId = [
+    airline !== "Aerolínea a confirmar" ? airline : "",
+    f.numero.trim(),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+  const parts: string[] = [flightId ? `${label} ${flightId}` : label];
+
+  const from = f.aeropuertoSalida.trim().toUpperCase();
+  const to = f.aeropuertoLlegada.trim().toUpperCase();
+  if (from && to) parts.push(`${from}→${to}`);
+  else if (from || to) parts.push(from || to);
+
+  const dep = f.horaSalida.trim();
+  const arr = f.horaLlegada.trim();
+  if (dep && arr) parts.push(`${dep}→${arr}`);
+  else if (dep || arr) parts.push(dep || arr);
+
+  if (f.fecha.trim()) parts.push(formatDateShortMonth(f.fecha));
+
+  return parts.join(" · ");
+}
+
 function includesList(form: CotizacionFormInput): string[] {
   const items: string[] = [];
   const dest = form.destinos[0];
@@ -104,10 +173,21 @@ function includesList(form: CotizacionFormInput): string[] {
 
   if (hasFlights) {
     const airline = form.aerolinea?.trim() || "Aerolínea a confirmar";
-    const iata = iataForDestination(dest.destino);
-    items.push(
-      `2 vuelos ${airline} cabotaje ${ORIGIN_IATA === "AEP" ? "EZE" : ORIGIN_IATA}-${iata}-${ORIGIN_IATA === "AEP" ? "EZE" : ORIGIN_IATA} (ida + vuelta) con tasas`,
-    );
+    const idaStructured = hasStructuredFlightLeg(form, "ida");
+    const vueltaStructured = hasStructuredFlightLeg(form, "vuelta");
+
+    if (idaStructured || vueltaStructured) {
+      if (idaStructured) items.push(formatFlightLegLine(form, "ida", airline));
+      if (vueltaStructured) {
+        items.push(formatFlightLegLine(form, "vuelta", airline));
+      }
+    } else {
+      const iata = iataForDestination(dest.destino);
+      const origin = ORIGIN_IATA === "AEP" ? "EZE" : ORIGIN_IATA;
+      items.push(
+        `2 vuelos ${airline} cabotaje ${origin}-${iata}-${origin} (ida + vuelta) con tasas`,
+      );
+    }
   }
 
   if (dest.hotelAdultoArs + dest.hotelMenorArs > 0) {
@@ -119,6 +199,7 @@ function includesList(form: CotizacionFormInput): string[] {
     items.push(
       `${name}${cat} · ${nights}${regimen}${habitacion}`.replace(/\s+/g, " "),
     );
+    items.push(...textLines(dest.hotelIncluye));
   }
 
   for (const id of dest.excursionIds) {
@@ -209,7 +290,10 @@ export function renderPdfHtml(data: PdfRenderData): string {
       : "";
 
   const includes = data.includes ?? includesList(form);
-  const excludes = data.excludes ?? copy.excludes;
+  const excludes = data.excludes ?? [
+    ...copy.excludes,
+    ...textLines(dest?.hotelExcluye),
+  ];
   const tags =
     data.tags ??
     copy.defaultTags.map((t) =>
@@ -231,6 +315,7 @@ export function renderPdfHtml(data: PdfRenderData): string {
       ...copy.hotelHighlights,
       dest?.hotelUbicacion ? `Ubicación: ${dest.hotelUbicacion}` : null,
       dest?.hotelAjusteRazon || null,
+      ...textLines(dest?.hotelCondiciones),
     ].filter((x): x is string => Boolean(x));
 
   const theme = mergePdfTheme(data.theme);

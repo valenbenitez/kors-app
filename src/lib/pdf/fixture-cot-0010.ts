@@ -2,7 +2,10 @@ import { formToFormulaInput } from "@/lib/cotizador/build-input";
 import { calcularCotizacion } from "@/lib/cotizador/formula";
 import { fallbackFxRates } from "@/lib/cotizador/rates";
 import type { PdfRenderData } from "@/lib/pdf/template";
-import type { CotizacionFormInput } from "@/lib/validations/cotizacion";
+import {
+  type CotizacionFormInput,
+  emptyDestino,
+} from "@/lib/validations/cotizacion";
 
 /**
  * Fixture reproducible COT-0010 (Krystel · Iguazú · ref docs/mvp/COT-0010_cliente.pdf).
@@ -63,15 +66,24 @@ export function buildCot0010Form(): CotizacionFormInput {
     metodoPago: "tarjeta",
     equipaje: "carry-on",
     aerolinea: "JetSMART",
+    vueloIdaFecha: "",
+    vueloIdaHoraSalida: "",
+    vueloIdaHoraLlegada: "",
+    vueloIdaNumero: "",
+    vueloIdaAeropuertoSalida: "",
+    vueloIdaAeropuertoLlegada: "",
+    vueloVueltaFecha: "",
+    vueloVueltaHoraSalida: "",
+    vueloVueltaHoraLlegada: "",
+    vueloVueltaNumero: "",
+    vueloVueltaAeropuertoSalida: "",
+    vueloVueltaAeropuertoLlegada: "",
     itinerario: COT_0010_ITINERARIO,
     destinos: [
       {
-        destino: "Misiones",
-        moneda: "ARS",
+        ...emptyDestino("Misiones"),
         vueloIdaAdultoArs: flightArs,
         vueloIdaMenorArs: flightArs,
-        vueloVueltaAdultoArs: 0,
-        vueloVueltaMenorArs: 0,
         hotelAdultoArs: hotelArs,
         hotelMenorArs: hotelArs,
         hotelNombre: "Yvy Hotel de Selva",
@@ -79,7 +91,6 @@ export function buildCot0010Form(): CotizacionFormInput {
         hotelRegimen: "desayuno incluido",
         hotelUbicacion: "2.32 km del centro",
         hotelHabitacion: "2 × habitación Twin Estándar",
-        hotelAjusteArs: 0,
         hotelAjusteRazon: "descuento -31% aplicado (ARS 1.857.065 → 1.277.794)",
         // IDs del catálogo con nombres restaurados; netos del fixture
         // coinciden con la reconstrucción ARS de la fórmula (48.200 / 65.600).

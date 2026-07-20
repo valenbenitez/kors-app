@@ -526,6 +526,134 @@ export function CotizadorWizard() {
               </div>
             </div>
 
+            <div className="space-y-4 rounded-2xl border border-border p-4">
+              <h3 className="text-sm font-semibold">Vuelo ida (opcional)</h3>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="space-y-2">
+                  <Label htmlFor="vueloIdaFecha">Fecha</Label>
+                  <Input
+                    id="vueloIdaFecha"
+                    type="date"
+                    {...register("vueloIdaFecha")}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="vueloIdaHoraSalida">Hora salida</Label>
+                  <Input
+                    id="vueloIdaHoraSalida"
+                    type="time"
+                    {...register("vueloIdaHoraSalida")}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="vueloIdaHoraLlegada">Hora llegada</Label>
+                  <Input
+                    id="vueloIdaHoraLlegada"
+                    type="time"
+                    {...register("vueloIdaHoraLlegada")}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="vueloIdaNumero">Número de vuelo ida</Label>
+                  <Input
+                    id="vueloIdaNumero"
+                    placeholder="ej. 3150"
+                    {...register("vueloIdaNumero")}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="vueloIdaAeropuertoSalida">
+                    Aeropuerto salida ida (IATA)
+                  </Label>
+                  <Input
+                    id="vueloIdaAeropuertoSalida"
+                    placeholder="EZE"
+                    maxLength={3}
+                    className="uppercase"
+                    {...register("vueloIdaAeropuertoSalida")}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="vueloIdaAeropuertoLlegada">
+                    Aeropuerto llegada ida (IATA)
+                  </Label>
+                  <Input
+                    id="vueloIdaAeropuertoLlegada"
+                    placeholder="IGR"
+                    maxLength={3}
+                    className="uppercase"
+                    {...register("vueloIdaAeropuertoLlegada")}
+                  />
+                </div>
+              </div>
+              <FieldError message={errors.vueloIdaFecha?.message} />
+            </div>
+
+            <div className="space-y-4 rounded-2xl border border-border p-4">
+              <h3 className="text-sm font-semibold">Vuelo vuelta (opcional)</h3>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="space-y-2">
+                  <Label htmlFor="vueloVueltaFecha">Fecha</Label>
+                  <Input
+                    id="vueloVueltaFecha"
+                    type="date"
+                    {...register("vueloVueltaFecha")}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="vueloVueltaHoraSalida">Hora salida</Label>
+                  <Input
+                    id="vueloVueltaHoraSalida"
+                    type="time"
+                    {...register("vueloVueltaHoraSalida")}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="vueloVueltaHoraLlegada">Hora llegada</Label>
+                  <Input
+                    id="vueloVueltaHoraLlegada"
+                    type="time"
+                    {...register("vueloVueltaHoraLlegada")}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="vueloVueltaNumero">
+                    Número de vuelo vuelta
+                  </Label>
+                  <Input
+                    id="vueloVueltaNumero"
+                    placeholder="ej. 3151"
+                    {...register("vueloVueltaNumero")}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="vueloVueltaAeropuertoSalida">
+                    Aeropuerto salida vuelta (IATA)
+                  </Label>
+                  <Input
+                    id="vueloVueltaAeropuertoSalida"
+                    placeholder="IGR"
+                    maxLength={3}
+                    className="uppercase"
+                    {...register("vueloVueltaAeropuertoSalida")}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="vueloVueltaAeropuertoLlegada">
+                    Aeropuerto llegada vuelta (IATA)
+                  </Label>
+                  <Input
+                    id="vueloVueltaAeropuertoLlegada"
+                    placeholder="EZE"
+                    maxLength={3}
+                    className="uppercase"
+                    {...register("vueloVueltaAeropuertoLlegada")}
+                  />
+                </div>
+              </div>
+              <FieldError message={errors.vueloVueltaFecha?.message} />
+            </div>
+
             <div className="space-y-2">
               <Label>Destinos</Label>
               <div className="flex flex-wrap gap-2">
@@ -715,6 +843,42 @@ export function CotizadorWizard() {
                       <Label>Tipo habitación</Label>
                       <Input
                         {...register(`destinos.${index}.hotelHabitacion`)}
+                      />
+                    </div>
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label htmlFor={`hotelIncluye-${index}`}>
+                        Hotel incluye (opcional)
+                      </Label>
+                      <textarea
+                        id={`hotelIncluye-${index}`}
+                        rows={2}
+                        className="w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm"
+                        placeholder="Una línea por ítem…"
+                        {...register(`destinos.${index}.hotelIncluye`)}
+                      />
+                    </div>
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label htmlFor={`hotelExcluye-${index}`}>
+                        Hotel excluye (opcional)
+                      </Label>
+                      <textarea
+                        id={`hotelExcluye-${index}`}
+                        rows={2}
+                        className="w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm"
+                        placeholder="Una línea por ítem…"
+                        {...register(`destinos.${index}.hotelExcluye`)}
+                      />
+                    </div>
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label htmlFor={`hotelCondiciones-${index}`}>
+                        Condiciones del hotel (opcional)
+                      </Label>
+                      <textarea
+                        id={`hotelCondiciones-${index}`}
+                        rows={2}
+                        className="w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm"
+                        placeholder="Check-in, políticas, notas…"
+                        {...register(`destinos.${index}.hotelCondiciones`)}
                       />
                     </div>
                     <div className="space-y-2">

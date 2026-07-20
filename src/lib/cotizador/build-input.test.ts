@@ -8,7 +8,10 @@ import { calcularCotizacion } from "@/lib/cotizador/formula";
 import { FORMULA_PARAMS, FX_RATES_TO_USD } from "@/lib/cotizador/params";
 import { fallbackFxRates } from "@/lib/cotizador/rates";
 import { renderPdfHtml } from "@/lib/pdf/template";
-import type { CotizacionFormInput } from "@/lib/validations/cotizacion";
+import {
+  type CotizacionFormInput,
+  emptyDestino,
+} from "@/lib/validations/cotizacion";
 
 const rates = fallbackFxRates();
 
@@ -31,6 +34,18 @@ function minimalForm(
     metodoPago: "efectivo",
     equipaje: "carry-on",
     aerolinea: "LATAM",
+    vueloIdaFecha: "",
+    vueloIdaHoraSalida: "",
+    vueloIdaHoraLlegada: "",
+    vueloIdaNumero: "",
+    vueloIdaAeropuertoSalida: "",
+    vueloIdaAeropuertoLlegada: "",
+    vueloVueltaFecha: "",
+    vueloVueltaHoraSalida: "",
+    vueloVueltaHoraLlegada: "",
+    vueloVueltaNumero: "",
+    vueloVueltaAeropuertoSalida: "",
+    vueloVueltaAeropuertoLlegada: "",
     itinerario: "Día 1: llegada",
     ...overrides,
   };
@@ -66,22 +81,14 @@ describe("formToFormulaInput — multi-currency → USD final", () => {
     const form = minimalForm({
       destinos: [
         {
-          destino: "Río Negro",
+          ...emptyDestino("Río Negro"),
           moneda: "CLP",
-          vueloIdaAdultoArs: 0,
-          vueloIdaMenorArs: 0,
-          vueloVueltaAdultoArs: 0,
-          vueloVueltaMenorArs: 0,
           hotelAdultoArs: 950_000,
-          hotelMenorArs: 0,
           hotelNombre: "Hotel Test",
           hotelCategoria: "4★",
           hotelRegimen: "desayuno",
           hotelUbicacion: "Centro",
           hotelHabitacion: "Doble",
-          hotelAjusteArs: 0,
-          hotelAjusteRazon: "",
-          excursionIds: [],
         },
       ],
     });
@@ -106,22 +113,14 @@ describe("formToFormulaInput — multi-currency → USD final", () => {
       paisOrigen: "Colombia",
       destinos: [
         {
-          destino: "Río Negro",
+          ...emptyDestino("Río Negro"),
           moneda: "COP",
           vueloIdaAdultoArs: 4_100_000,
-          vueloIdaMenorArs: 0,
-          vueloVueltaAdultoArs: 0,
-          vueloVueltaMenorArs: 0,
-          hotelAdultoArs: 0,
-          hotelMenorArs: 0,
           hotelNombre: "Hotel COP",
           hotelCategoria: "3★",
           hotelRegimen: "solo alojamiento",
           hotelUbicacion: "Centro",
           hotelHabitacion: "Simple",
-          hotelAjusteArs: 0,
-          hotelAjusteRazon: "",
-          excursionIds: [],
         },
       ],
     });

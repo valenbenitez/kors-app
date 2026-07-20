@@ -341,3 +341,34 @@ describe("CotizadorWizard — generación del PDF", () => {
     expect(screen.getByText(/valores de respaldo/i)).toBeInTheDocument();
   });
 });
+
+describe("CotizadorWizard — campos vuelo/hotel prefill", () => {
+  it("shows optional flight segment fields on step 0", async () => {
+    render(<CotizadorWizard />);
+    await waitForRatesReady();
+
+    expect(screen.getByText("Vuelo ida (opcional)")).toBeInTheDocument();
+    expect(screen.getByText("Vuelo vuelta (opcional)")).toBeInTheDocument();
+    expect(screen.getByLabelText("Número de vuelo ida")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Aeropuerto salida ida (IATA)"),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Número de vuelo vuelta")).toBeInTheDocument();
+  });
+
+  it("shows hotel incluye/excluye/condiciones on costos step", async () => {
+    const user = userEvent.setup();
+    render(<CotizadorWizard />);
+    await waitForRatesReady();
+    await fillStep0(user);
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+
+    await screen.findByLabelText("Hotel incluye (opcional)");
+    expect(
+      screen.getByLabelText("Hotel excluye (opcional)"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Condiciones del hotel (opcional)"),
+    ).toBeInTheDocument();
+  });
+});

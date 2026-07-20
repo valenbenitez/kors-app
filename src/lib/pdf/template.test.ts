@@ -13,7 +13,10 @@ import {
 } from "@/lib/pdf/fixture-cot-0010";
 import { htmlToPdf } from "@/lib/pdf/generate";
 import { renderPdfHtml } from "@/lib/pdf/template";
-import type { CotizacionFormInput } from "@/lib/validations/cotizacion";
+import {
+  type CotizacionFormInput,
+  emptyDestino,
+} from "@/lib/validations/cotizacion";
 
 const rates = fallbackFxRates();
 
@@ -52,6 +55,18 @@ function buildBarilocheLeakageForm(): CotizacionFormInput {
     metodoPago: "efectivo",
     equipaje: "valija 23 kg",
     aerolinea: "Aerolíneas Argentinas",
+    vueloIdaFecha: "",
+    vueloIdaHoraSalida: "",
+    vueloIdaHoraLlegada: "",
+    vueloIdaNumero: "",
+    vueloIdaAeropuertoSalida: "",
+    vueloIdaAeropuertoLlegada: "",
+    vueloVueltaFecha: "",
+    vueloVueltaHoraSalida: "",
+    vueloVueltaHoraLlegada: "",
+    vueloVueltaNumero: "",
+    vueloVueltaAeropuertoSalida: "",
+    vueloVueltaAeropuertoLlegada: "",
     itinerario: `Día 1 · Mié 10 Mar: Buenos Aires → Bariloche
 Vuelo AR1620. Check-in Hotel Nahuel Huapi.
 
@@ -62,22 +77,15 @@ Día 5 · Dom 15 Mar: Bariloche → Buenos Aires
 Regreso.`,
     destinos: [
       {
-        destino: "Río Negro",
-        moneda: "ARS",
+        ...emptyDestino("Río Negro"),
         vueloIdaAdultoArs: 180_000,
-        vueloIdaMenorArs: 0,
         vueloVueltaAdultoArs: 180_000,
-        vueloVueltaMenorArs: 0,
         hotelAdultoArs: 95_000,
-        hotelMenorArs: 0,
         hotelNombre: "Hotel Nahuel Huapi",
         hotelCategoria: "4★",
         hotelRegimen: "desayuno incluido",
         hotelUbicacion: "Centro Bariloche",
         hotelHabitacion: "Doble Standard",
-        hotelAjusteArs: 0,
-        hotelAjusteRazon: "",
-        excursionIds: [],
       },
     ],
   };
@@ -252,6 +260,74 @@ Día 3 · Jue 17 Ago: Regreso`;
     expect(html).not.toContain("descuento -31%");
     expect(html).toContain("Vuelos internacionales no incluidos");
     expect(html).toContain("Ideal para familias");
+  });
+});
+
+describe("renderPdfHtml — structured flight + hotel fields", () => {
+  it("uses concrete flight lines when segment fields are present", () => {
+    const form = buildBarilocheLeakageForm();
+    form.vueloIdaNumero = "1620";
+    form.vueloIdaAeropuertoSalida = "EZE";
+    form.vueloIdaAeropuertoLlegada = "BRC";
+    form.vueloIdaHoraSalida = "08:10";
+    form.vueloIdaHoraLlegada = "10:45";
+    form.vueloIdaFecha = "2027-03-10";
+    form.vueloVueltaNumero = "1621";
+    form.vueloVueltaAeropuertoSalida = "BRC";
+    form.vueloVueltaAeropuertoLlegada = "EZE";
+    form.vueloVueltaHoraSalida = "18:00";
+    form.vueloVueltaHoraLlegada = "20:30";
+    form.vueloVueltaFecha = "2027-03-15";
+
+    const result = calcularCotizacion(formToFormulaInput(form, rates));
+    const html = renderPdfHtml({
+      cotNumber: "COT-2100",
+      form,
+      result,
+      generatedAt: "2027-01-15",
+    });
+
+    expect(html).toContain("Vuelo ida Aerolíneas Argentinas 1620");
+    expect(html).toContain("EZE→BRC");
+    expect(html).toContain("08:10→10:45");
+    expect(html).toContain("Vuelo vuelta Aerolíneas Argentinas 1621");
+    expect(html).toContain("BRC→EZE");
+    expect(html).not.toContain("2 vuelos Aerolíneas Argentinas cabotaje");
+  });
+
+  it("keeps generic flight fallback when segment fields are empty", () => {
+    const form = buildBarilocheLeakageForm();
+    const result = calcularCotizacion(formToFormulaInput(form, rates));
+    const html = renderPdfHtml({
+      cotNumber: "COT-2101",
+      form,
+      result,
+      generatedAt: "2027-01-15",
+    });
+
+    expect(html).toContain(
+      "2 vuelos Aerolíneas Argentinas cabotaje EZE-BRC-EZE (ida + vuelta) con tasas",
+    );
+  });
+
+  it("merges hotel incluye / excluye / condiciones into PDF lists", () => {
+    const form = buildBarilocheLeakageForm();
+    form.destinos[0].hotelIncluye = "WiFi en habitación\nPileta climatizada";
+    form.destinos[0].hotelExcluye = "Spa no incluido";
+    form.destinos[0].hotelCondiciones = "Check-in desde 15:00";
+
+    const result = calcularCotizacion(formToFormulaInput(form, rates));
+    const html = renderPdfHtml({
+      cotNumber: "COT-2102",
+      form,
+      result,
+      generatedAt: "2027-01-15",
+    });
+
+    expect(html).toContain("WiFi en habitación");
+    expect(html).toContain("Pileta climatizada");
+    expect(html).toContain("Spa no incluido");
+    expect(html).toContain("Check-in desde 15:00");
   });
 });
 
