@@ -1,4 +1,6 @@
-/** Códigos IATA hardcoded (Gap 2 revisitado). */
+import { provinceToCatalogDestino } from "@/lib/cotizador/provinces";
+
+/** Hardcoded IATA codes keyed by catalog destination names. */
 export const IATA_BY_DESTINO: Record<string, string> = {
   Iguazú: "IGR",
   Bariloche: "BRC",
@@ -11,6 +13,13 @@ export const IATA_BY_DESTINO: Record<string, string> = {
 };
 
 export const ORIGIN_IATA = "AEP";
+
+/** Resolve IATA for a form destination selection (province / Uruguay). */
+export function iataForDestination(selection: string): string {
+  const catalogDestino = provinceToCatalogDestino(selection);
+  if (!catalogDestino) return "???";
+  return IATA_BY_DESTINO[catalogDestino] ?? "???";
+}
 
 export function formatDateEs(iso: string): string {
   const d = new Date(`${iso}T12:00:00`);

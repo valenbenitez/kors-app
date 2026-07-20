@@ -5,6 +5,7 @@ import { PNG } from "pngjs";
 import { describe, expect, it } from "vitest";
 import { formToFormulaInput } from "@/lib/cotizador/build-input";
 import { calcularCotizacion } from "@/lib/cotizador/formula";
+import { fallbackFxRates } from "@/lib/cotizador/rates";
 import { clientPdfFilename, generateCotNumber } from "@/lib/pdf/cot-number";
 import {
   buildCot0010Form,
@@ -13,6 +14,8 @@ import {
 import { htmlToPdf } from "@/lib/pdf/generate";
 import { renderPdfHtml } from "@/lib/pdf/template";
 import type { CotizacionFormInput } from "@/lib/validations/cotizacion";
+
+const rates = fallbackFxRates();
 
 const SNAPSHOT_DIR = join(process.cwd(), "src/lib/pdf/__snapshots__/cot-0010");
 const UPDATE = process.env.UPDATE_PDF_SNAPSHOTS === "1";
@@ -40,7 +43,7 @@ function buildBarilocheLeakageForm(): CotizacionFormInput {
     paisOrigen: "Argentina",
     whatsapp: "+5491112345678",
     perfil: "Pareja",
-    destinosSeleccionados: ["Bariloche"],
+    destinosSeleccionados: ["Río Negro"],
     fechaIda: "2027-03-10",
     fechaVuelta: "2027-03-15",
     paxAdultos: 2,
@@ -59,7 +62,7 @@ Día 5 · Dom 15 Mar: Bariloche → Buenos Aires
 Regreso.`,
     destinos: [
       {
-        destino: "Bariloche",
+        destino: "Río Negro",
         moneda: "ARS",
         vueloIdaAdultoArs: 180_000,
         vueloIdaMenorArs: 0,
@@ -105,7 +108,7 @@ describe("renderPdfHtml — fixture COT-0010", () => {
 
     // Página 1
     expect(html).toContain("Hola, Krystel");
-    expect(html).toContain("IGUAZÚ");
+    expect(html).toContain("MISIONES");
     expect(html).toMatch(/Total por persona/i);
     expect(html).toContain("Salida");
     expect(html).toContain("Regreso");
@@ -181,7 +184,7 @@ describe("renderPdfHtml — fixture COT-0010", () => {
 describe("renderPdfHtml — no COT-0010 leakage", () => {
   it("Bariloche form (Ana Pérez) shows form data and no Krystel/COT-0010 strings", () => {
     const form = buildBarilocheLeakageForm();
-    const result = calcularCotizacion(formToFormulaInput(form));
+    const result = calcularCotizacion(formToFormulaInput(form, rates));
     const html = renderPdfHtml({
       cotNumber: "COT-2099",
       form,
@@ -190,7 +193,7 @@ describe("renderPdfHtml — no COT-0010 leakage", () => {
     });
 
     expect(html).toContain("Hola, Ana");
-    expect(html).toContain("BARILOCHE");
+    expect(html).toContain("RÍO NEGRO");
     expect(html).toContain("Hotel Nahuel Huapi");
     expect(html).toContain("Aerolíneas Argentinas");
     expect(html).toMatch(/10\s*mar\.?\s*2027/i);
@@ -227,7 +230,7 @@ Día 3 · Jue 17 Ago: Regreso`;
     form.destinos[0].hotelNombre = "Hotel Cataratas Resort";
     form.destinos[0].hotelAjusteRazon = "";
 
-    const result = calcularCotizacion(formToFormulaInput(form));
+    const result = calcularCotizacion(formToFormulaInput(form, rates));
     const html = renderPdfHtml({
       cotNumber: "COT-0042",
       form,

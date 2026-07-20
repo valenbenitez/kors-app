@@ -72,7 +72,7 @@ describe("parseTripQuoteDoc", () => {
     paisOrigen: "Argentina" as const,
     whatsapp: "+5491112345678",
     perfil: "Pareja" as const,
-    destinosSeleccionados: ["Iguazú" as const],
+    destinosSeleccionados: ["Misiones" as const],
     fechaIda: "2026-07-01",
     fechaVuelta: "2026-07-05",
     paxAdultos: 2,
@@ -84,7 +84,7 @@ describe("parseTripQuoteDoc", () => {
     itinerario: "Día 1",
     destinos: [
       {
-        destino: "Iguazú" as const,
+        destino: "Misiones" as const,
         moneda: "ARS" as const,
         vueloIdaAdultoArs: 100,
         vueloIdaMenorArs: 0,
@@ -119,7 +119,7 @@ describe("parseTripQuoteDoc", () => {
     precioMenorCliente: 0,
     destinos: [
       {
-        destino: "Iguazú",
+        destino: "Misiones",
         subtotalUsd: 100,
         hotelAdultoArsNet: 200,
         hotelMenorArsNet: 0,

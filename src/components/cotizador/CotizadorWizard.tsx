@@ -2,37 +2,44 @@
 
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { Loader2 } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   type Resolver,
   useFieldArray,
   useForm,
   useWatch,
 } from "react-hook-form";
-import { MoneyField } from "@/components/cotizador/MoneyField";
+import { CURRENCY_UI, MoneyField } from "@/components/cotizador/MoneyField";
 import { PdfPreview } from "@/components/pdf/PdfPreview";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formToFormulaInput } from "@/lib/cotizador/build-input";
-import {
-  type CatalogExcursion,
-  DESTINOS,
-  filterExcursions,
-} from "@/lib/cotizador/catalog";
+import type { CatalogExcursion } from "@/lib/cotizador/catalog";
 import {
   calcularCotizacion,
   FormulaError,
   type FormulaResult,
 } from "@/lib/cotizador/formula";
 import { generateItinerary } from "@/lib/cotizador/itinerary";
-import { FORMULA_PARAMS } from "@/lib/cotizador/params";
+import {
+  DESTINO_OPTIONS,
+  type DestinoOption,
+  excursionsForSelection,
+} from "@/lib/cotizador/provinces";
+import {
+  convertCatalogAmountToForm,
+  type FxRatesMap,
+  fallbackFxRates,
+  isFxRatesMap,
+} from "@/lib/cotizador/rates";
 import {
   type CotizacionFormInput,
   cotizacionFormSchema,
   defaultCotizacionValues,
   EQUIPAJES,
   emptyDestino,
+  type FormMoneda,
   HOTEL_CATEGORIAS,
   METODOS_PAGO,
   MONEDAS,
@@ -45,6 +52,12 @@ const STEPS = [
   { full: "Costos por destino", short: "Costos" },
   { full: "Confirmación", short: "Confirmar" },
 ] as const;
+
+function formatDisplayAmount(amount: number, currency: FormMoneda): string {
+  return amount.toLocaleString("es-AR", {
+    maximumFractionDigits: CURRENCY_UI[currency].decimals,
+  });
+}
 
 function cotNumberFromDownload(
   headerValue: string | null,
@@ -96,6 +109,13 @@ export function CotizadorWizard() {
   const [preview, setPreview] = useState<FormulaResult | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [showPdfPreview, setShowPdfPreview] = useState(false);
+  // Live rates when /api/rates succeeds; FX_RATES_TO_USD fallback keeps demos
+  // working if the sheet is down (show muted "TC (fallback)" warning).
+  const [rates, setRates] = useState<FxRatesMap | null>(null);
+  const [ratesSource, setRatesSource] = useState<"live" | "fallback" | null>(
+    null,
+  );
+  const [ratesLoading, setRatesLoading] = useState(true);
   // Per-destination search query; filtering the list does not clear excursionIds.
   const [excursionQueries, setExcursionQueries] = useState<
     Record<string, string>
@@ -103,6 +123,40 @@ export function CotizadorWizard() {
   // Guard reentrante: garantiza como máximo una petición activa aunque
   // lleguen submits concurrentes (doble click / doble Enter) antes del rerender.
   const isGeneratingRef = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadRates() {
+      setRatesLoading(true);
+      try {
+        const res = await fetch("/api/rates");
+        if (!res.ok) throw new Error(`Rates HTTP ${res.status}`);
+        const data: unknown = await res.json();
+        if (!isFxRatesMap(data)) {
+          throw new Error("Invalid rates payload");
+        }
+        if (!cancelled) {
+          setRates(data);
+          setRatesSource("live");
+        }
+      } catch {
+        // Prefer live rates; on failure use hardcoded FX_RATES_TO_USD so demos
+        // still work, with a visible muted warning in the header.
+        if (!cancelled) {
+          setRates(fallbackFxRates());
+          setRatesSource("fallback");
+        }
+      } finally {
+        if (!cancelled) setRatesLoading(false);
+      }
+    }
+
+    void loadRates();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const form = useForm<CotizacionFormInput>({
     resolver: standardSchemaResolver(
@@ -136,12 +190,14 @@ export function CotizadorWizard() {
   const excursionsByDestino = useMemo(() => {
     const map: Record<string, CatalogExcursion[]> = {};
     for (const d of destinosSeleccionados) {
-      map[d] = fechaIda ? filterExcursions({ destino: d, fechaIda }) : [];
+      map[d] = fechaIda
+        ? excursionsForSelection({ selection: d, fechaIda })
+        : [];
     }
     return map;
   }, [destinosSeleccionados, fechaIda]);
 
-  function syncDestinos(selected: (typeof DESTINOS)[number][]) {
+  function syncDestinos(selected: DestinoOption[]) {
     const current = getValues("destinos");
     const next = selected.map(
       (destino) =>
@@ -199,9 +255,15 @@ export function CotizadorWizard() {
     if (step === 1) {
       const ok = await trigger(["destinos"]);
       if (!ok) return;
+      if (!rates) {
+        setServerError("Cotizaciones no disponibles. Recargá la página.");
+        return;
+      }
       refreshItinerary();
       try {
-        const result = calcularCotizacion(formToFormulaInput(getValues()));
+        const result = calcularCotizacion(
+          formToFormulaInput(getValues(), rates),
+        );
         setPreview(result);
         setStep(2);
       } catch (error) {
@@ -264,6 +326,9 @@ export function CotizadorWizard() {
     }
   }
 
+  // Multi-destino: TC header uses the first destino's moneda.
+  const headerMoneda = destinosWatch.find((d) => d?.moneda)?.moneda ?? "ARS";
+
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6 sm:py-8">
       <header>
@@ -271,8 +336,18 @@ export function CotizadorWizard() {
           Nueva cotización
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          TC ARS/USD {FORMULA_PARAMS.tcArsUsd} · fórmula v2.9
+          {ratesLoading || !rates
+            ? "Cargando cotizaciones…"
+            : ratesSource === "fallback"
+              ? `TC ${headerMoneda}/USD ${rates[headerMoneda]} (fallback) · fórmula v2.9`
+              : `TC ${headerMoneda}/USD ${rates[headerMoneda]} · fórmula v2.9`}
         </p>
+        {ratesSource === "fallback" ? (
+          <p className="mt-1 text-xs text-muted-foreground">
+            No se pudieron cargar las cotizaciones en vivo; se usan valores de
+            respaldo.
+          </p>
+        ) : null}
       </header>
 
       <nav aria-label="Pasos del cotizador" className="flex gap-1.5 sm:gap-2">
@@ -454,7 +529,7 @@ export function CotizadorWizard() {
             <div className="space-y-2">
               <Label>Destinos</Label>
               <div className="flex flex-wrap gap-2">
-                {DESTINOS.map((destino) => {
+                {DESTINO_OPTIONS.map((destino) => {
                   const selected = destinosSeleccionados.includes(destino);
                   return (
                     <button
@@ -492,10 +567,15 @@ export function CotizadorWizard() {
               // Selected ids stay in form even when hidden by the name filter.
               const visibleOptions =
                 fechaIda && query.trim()
-                  ? filterExcursions({ destino, fechaIda, query })
+                  ? excursionsForSelection({
+                      selection: destino,
+                      fechaIda,
+                      query,
+                    })
                   : options;
               const selectedIds = destinosWatch[index]?.excursionIds ?? [];
               const moneda = destinosWatch[index]?.moneda ?? "ARS";
+              const fx = rates ?? fallbackFxRates();
               const hasMenores = paxMenores > 0;
               const cur = (label: string) => `${label} (${moneda})`;
               return (
@@ -683,6 +763,12 @@ export function CotizadorWizard() {
                           <div className="max-h-64 space-y-2 overflow-y-auto rounded-2xl border border-border p-3">
                             {visibleOptions.map((exc) => {
                               const checked = selectedIds.includes(exc.id);
+                              const displayAmount = convertCatalogAmountToForm(
+                                exc.neto,
+                                exc.moneda,
+                                moneda,
+                                fx,
+                              );
                               return (
                                 <label
                                   key={exc.id}
@@ -711,9 +797,12 @@ export function CotizadorWizard() {
                                       {exc.nombreLimpio}
                                     </span>
                                     <span className="mt-0.5 block text-muted-foreground">
-                                      {exc.moneda}{" "}
-                                      {exc.neto.toLocaleString("es-AR")} ·{" "}
-                                      {exc.politicaMenores}
+                                      {moneda}{" "}
+                                      {formatDisplayAmount(
+                                        displayAmount,
+                                        moneda,
+                                      )}{" "}
+                                      · {exc.politicaMenores}
                                       {exc.proveedor
                                         ? ` · ${exc.proveedor}`
                                         : ""}
@@ -843,8 +932,12 @@ export function CotizadorWizard() {
             Atrás
           </Button>
           {step < 2 ? (
-            <Button type="button" onClick={goNext}>
-              Continuar
+            <Button
+              type="button"
+              disabled={ratesLoading || !rates}
+              onClick={goNext}
+            >
+              {ratesLoading ? "Cargando cotizaciones…" : "Continuar"}
             </Button>
           ) : (
             <Button

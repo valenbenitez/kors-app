@@ -1,5 +1,6 @@
 import { formToFormulaInput } from "@/lib/cotizador/build-input";
 import { calcularCotizacion } from "@/lib/cotizador/formula";
+import { fallbackFxRates } from "@/lib/cotizador/rates";
 import type { PdfRenderData } from "@/lib/pdf/template";
 import type { CotizacionFormInput } from "@/lib/validations/cotizacion";
 
@@ -53,7 +54,7 @@ export function buildCot0010Form(): CotizacionFormInput {
     paisOrigen: "Perú",
     whatsapp: "+51999958694",
     perfil: "Familia con niños",
-    destinosSeleccionados: ["Iguazú"],
+    destinosSeleccionados: ["Misiones"],
     fechaIda: "2026-07-28",
     fechaVuelta: "2026-07-31",
     paxAdultos: 5,
@@ -65,7 +66,7 @@ export function buildCot0010Form(): CotizacionFormInput {
     itinerario: COT_0010_ITINERARIO,
     destinos: [
       {
-        destino: "Iguazú",
+        destino: "Misiones",
         moneda: "ARS",
         vueloIdaAdultoArs: flightArs,
         vueloIdaMenorArs: flightArs,
@@ -90,8 +91,9 @@ export function buildCot0010Form(): CotizacionFormInput {
 
 export function buildCot0010PdfData(): PdfRenderData {
   const form = buildCot0010Form();
+  const rates = fallbackFxRates();
   const result = calcularCotizacion({
-    ...formToFormulaInput(form),
+    ...formToFormulaInput(form, rates),
     tcArsUsd: 1420,
   });
 

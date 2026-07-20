@@ -6,7 +6,7 @@ import {
   feeMultiplierLabel,
   formatDateEs,
   formatDateShortMonth,
-  IATA_BY_DESTINO,
+  iataForDestination,
   nightsLabel,
   ORIGIN_IATA,
   paymentFooterLine,
@@ -104,7 +104,7 @@ function includesList(form: CotizacionFormInput): string[] {
 
   if (hasFlights) {
     const airline = form.aerolinea?.trim() || "Aerolínea a confirmar";
-    const iata = IATA_BY_DESTINO[dest.destino] ?? "???";
+    const iata = iataForDestination(dest.destino);
     items.push(
       `2 vuelos ${airline} cabotaje ${ORIGIN_IATA === "AEP" ? "EZE" : ORIGIN_IATA}-${iata}-${ORIGIN_IATA === "AEP" ? "EZE" : ORIGIN_IATA} (ida + vuelta) con tasas`,
     );

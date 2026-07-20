@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DESTINOS } from "@/lib/cotizador/catalog";
+import { DESTINO_OPTIONS, type DestinoOption } from "@/lib/cotizador/provinces";
 
 export const PAISES = [
   "Argentina",
@@ -40,8 +40,12 @@ export const MONEDAS = ["CLP", "ARS", "COP", "PIX", "USD", "PEN"] as const;
 
 export type FormMoneda = (typeof MONEDAS)[number];
 
+const destinoOptionEnum = z.enum(
+  DESTINO_OPTIONS as unknown as [DestinoOption, ...DestinoOption[]],
+);
+
 const destinoFormSchema = z.object({
-  destino: z.enum(DESTINOS),
+  destino: destinoOptionEnum,
   moneda: z.enum(MONEDAS),
   vueloIdaAdultoArs: z.coerce.number().min(0),
   vueloIdaMenorArs: z.coerce.number().min(0),
@@ -66,7 +70,7 @@ export const cotizacionFormSchema = z
     whatsapp: z.string().min(8, "Ingresá un WhatsApp válido"),
     perfil: z.enum(PERFILES),
     destinosSeleccionados: z
-      .array(z.enum(DESTINOS))
+      .array(destinoOptionEnum)
       .min(1, "Seleccioná al menos un destino"),
     fechaIda: z.string().min(1, "Fecha de ida requerida"),
     fechaVuelta: z.string().min(1, "Fecha de vuelta requerida"),
@@ -106,9 +110,7 @@ export const cotizacionFormSchema = z
 export type CotizacionFormInput = z.infer<typeof cotizacionFormSchema>;
 export type DestinoFormInput = z.infer<typeof destinoFormSchema>;
 
-export function emptyDestino(
-  destino: (typeof DESTINOS)[number],
-): DestinoFormInput {
+export function emptyDestino(destino: DestinoOption): DestinoFormInput {
   return {
     destino,
     moneda: "ARS",
@@ -134,7 +136,7 @@ export const defaultCotizacionValues: CotizacionFormInput = {
   paisOrigen: "Argentina",
   whatsapp: "",
   perfil: "Primer viaje",
-  destinosSeleccionados: ["Iguazú"],
+  destinosSeleccionados: ["Misiones"],
   fechaIda: "",
   fechaVuelta: "",
   paxAdultos: 1,
@@ -144,5 +146,5 @@ export const defaultCotizacionValues: CotizacionFormInput = {
   equipaje: "carry-on",
   aerolinea: "",
   itinerario: "",
-  destinos: [emptyDestino("Iguazú")],
+  destinos: [emptyDestino("Misiones")],
 };

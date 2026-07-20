@@ -18,6 +18,20 @@ vi.mock("@/lib/cotizador/build-input", () => ({
   formToFormulaInput: (...args: unknown[]) => formToFormulaInput(...args),
 }));
 
+vi.mock("@/lib/cotizador/rates", () => ({
+  resolveRates: vi.fn(async () => ({
+    rates: {
+      USD: 1,
+      ARS: 1420,
+      CLP: 950,
+      COP: 4100,
+      PIX: 5.5,
+      PEN: 3.75,
+    },
+    source: "fallback" as const,
+  })),
+}));
+
 vi.mock("@/lib/cotizador/formula", () => ({
   calcularCotizacion: (...args: unknown[]) => calcularCotizacion(...args),
   FormulaError: class FormulaError extends Error {},

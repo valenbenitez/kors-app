@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { formToFormulaInput } from "@/lib/cotizador/build-input";
 import { calcularCotizacion, FormulaError } from "@/lib/cotizador/formula";
+import { resolveRates } from "@/lib/cotizador/rates";
 import { renderPdfHtml } from "@/lib/pdf/template";
 import { cotizacionFormSchema } from "@/lib/validations/cotizacion";
 
@@ -42,7 +43,8 @@ export async function POST(request: Request) {
   }
 
   try {
-    const formulaInput = formToFormulaInput(parsed.data);
+    const { rates } = await resolveRates();
+    const formulaInput = formToFormulaInput(parsed.data, rates);
     const result = calcularCotizacion(formulaInput);
     const generatedAt = new Date().toISOString().slice(0, 10);
 

@@ -16,8 +16,8 @@ export const FORMULA_PARAMS = {
 /**
  * Units of local currency per 1 USD (amount ÷ rate → USD).
  *
- * - USD / ARS: production values (ARS must equal `FORMULA_PARAMS.tcArsUsd`).
- * - CLP / COP / PIX / PEN: placeholders until ops provides live TC.
+ * Fallback defaults only — live rates come from `GET /api/rates` / `fetchLiveRates()`.
+ * - USD / ARS: snapshot values (ARS must equal `FORMULA_PARAMS.tcArsUsd`).
  * - PIX is a quote currency code (BRL-equivalent), not a payment rail.
  */
 export const FX_RATES_TO_USD = {

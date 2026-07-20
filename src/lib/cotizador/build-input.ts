@@ -5,11 +5,7 @@ import type {
   DestinoCostInput,
   ExcursionInput,
 } from "@/lib/cotizador/formula";
-import {
-  FORMULA_PARAMS,
-  FX_RATES_TO_USD,
-  type FxCurrency,
-} from "@/lib/cotizador/params";
+import type { FxRatesMap } from "@/lib/cotizador/rates";
 import type {
   CotizacionFormInput,
   FormMoneda,
@@ -19,17 +15,25 @@ Decimal.set({ precision: 28, rounding: Decimal.ROUND_HALF_UP });
 
 /**
  * Converts an amount in `moneda` to ARS-equivalent for the formula layer.
- * Path: local → USD (÷ rate) → ARS (× tcArsUsd), all via Decimal.
+ * Path: local → USD (÷ rate) → ARS (× rates.ARS), all via Decimal.
  */
-export function amountToArs(amount: number, moneda: FormMoneda): number {
-  const rate = FX_RATES_TO_USD[moneda as FxCurrency];
-  const tc = new Decimal(FORMULA_PARAMS.tcArsUsd);
+export function amountToArs(
+  amount: number,
+  moneda: FormMoneda,
+  rates: FxRatesMap,
+): number {
+  const rate = rates[moneda];
+  const tc = new Decimal(rates.ARS);
   return new Decimal(amount).div(rate).times(tc).toNumber();
 }
 
 /** Converts local currency amount to USD using the FX map (Decimal). */
-export function amountToUsd(amount: number, moneda: FormMoneda): number {
-  const rate = FX_RATES_TO_USD[moneda as FxCurrency];
+export function amountToUsd(
+  amount: number,
+  moneda: FormMoneda,
+  rates: FxRatesMap,
+): number {
+  const rate = rates[moneda];
   return new Decimal(amount).div(rate).toNumber();
 }
 
@@ -50,9 +54,16 @@ export function resolveExcursions(ids: string[]): ExcursionInput[] {
   });
 }
 
-export function formToFormulaInput(form: CotizacionFormInput): CotizacionInput {
+/**
+ * Builds formula input from the wizard form using the provided FX rates.
+ * Sets `tcArsUsd` from `rates.ARS` so the formula and conversion stay aligned.
+ */
+export function formToFormulaInput(
+  form: CotizacionFormInput,
+  rates: FxRatesMap,
+): CotizacionInput {
   const destinos: DestinoCostInput[] = form.destinos.map((d) => {
-    const toArs = (amount: number) => amountToArs(amount, d.moneda);
+    const toArs = (amount: number) => amountToArs(amount, d.moneda, rates);
 
     return {
       destino: d.destino,
@@ -78,5 +89,6 @@ export function formToFormulaInput(form: CotizacionFormInput): CotizacionInput {
     paxMenores: form.paxMenores,
     metodoPago: form.metodoPago,
     destinos,
+    tcArsUsd: rates.ARS,
   };
 }

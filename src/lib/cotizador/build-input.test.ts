@@ -6,8 +6,11 @@ import {
 } from "@/lib/cotizador/build-input";
 import { calcularCotizacion } from "@/lib/cotizador/formula";
 import { FORMULA_PARAMS, FX_RATES_TO_USD } from "@/lib/cotizador/params";
+import { fallbackFxRates } from "@/lib/cotizador/rates";
 import { renderPdfHtml } from "@/lib/pdf/template";
 import type { CotizacionFormInput } from "@/lib/validations/cotizacion";
+
+const rates = fallbackFxRates();
 
 function minimalForm(
   overrides: Partial<CotizacionFormInput> & {
@@ -19,7 +22,7 @@ function minimalForm(
     paisOrigen: "Chile",
     whatsapp: "+56912345678",
     perfil: "Pareja",
-    destinosSeleccionados: ["Bariloche"],
+    destinosSeleccionados: ["Río Negro"],
     fechaIda: "2027-06-01",
     fechaVuelta: "2027-06-08",
     paxAdultos: 1,
@@ -42,17 +45,17 @@ describe("FX_RATES_TO_USD", () => {
 
 describe("amountToUsd / amountToArs", () => {
   it("converts CLP via Decimal rate (950 CLP = 1 USD)", () => {
-    expect(amountToUsd(950_000, "CLP")).toBe(1000);
-    expect(amountToArs(950_000, "CLP")).toBe(1000 * FORMULA_PARAMS.tcArsUsd);
+    expect(amountToUsd(950_000, "CLP", rates)).toBe(1000);
+    expect(amountToArs(950_000, "CLP", rates)).toBe(1000 * rates.ARS);
   });
 
   it("leaves ARS unchanged when converting to ARS", () => {
-    expect(amountToArs(142_000, "ARS")).toBe(142_000);
-    expect(amountToUsd(142_000, "ARS")).toBe(100);
+    expect(amountToArs(142_000, "ARS", rates)).toBe(142_000);
+    expect(amountToUsd(142_000, "ARS", rates)).toBe(100);
   });
 
-  it("converts USD to ARS with tcArsUsd", () => {
-    expect(amountToArs(100, "USD")).toBe(100 * FORMULA_PARAMS.tcArsUsd);
+  it("converts USD to ARS with rates.ARS", () => {
+    expect(amountToArs(100, "USD", rates)).toBe(100 * rates.ARS);
   });
 });
 
@@ -63,7 +66,7 @@ describe("formToFormulaInput — multi-currency → USD final", () => {
     const form = minimalForm({
       destinos: [
         {
-          destino: "Bariloche",
+          destino: "Río Negro",
           moneda: "CLP",
           vueloIdaAdultoArs: 0,
           vueloIdaMenorArs: 0,
@@ -83,10 +86,9 @@ describe("formToFormulaInput — multi-currency → USD final", () => {
       ],
     });
 
-    const input = formToFormulaInput(form);
-    expect(input.destinos[0].hotelAdultoArs).toBe(
-      1000 * FORMULA_PARAMS.tcArsUsd,
-    );
+    const input = formToFormulaInput(form, rates);
+    expect(input.tcArsUsd).toBe(rates.ARS);
+    expect(input.destinos[0].hotelAdultoArs).toBe(1000 * rates.ARS);
 
     const result = calcularCotizacion(input);
 
@@ -104,7 +106,7 @@ describe("formToFormulaInput — multi-currency → USD final", () => {
       paisOrigen: "Colombia",
       destinos: [
         {
-          destino: "Bariloche",
+          destino: "Río Negro",
           moneda: "COP",
           vueloIdaAdultoArs: 4_100_000,
           vueloIdaMenorArs: 0,
@@ -124,7 +126,7 @@ describe("formToFormulaInput — multi-currency → USD final", () => {
       ],
     });
 
-    const result = calcularCotizacion(formToFormulaInput(form));
+    const result = calcularCotizacion(formToFormulaInput(form, rates));
     // 1000 / 0.95 = 1052.631578… → halfUp2
     expect(result.subtotalUsd).toBe(1052.63);
     expect(result.precioFinalCliente).toBeGreaterThan(0);

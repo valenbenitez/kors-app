@@ -1,13 +1,19 @@
 import { iguazuPdfCopy } from "@/data/pdf-copy/iguazu";
 import type { PdfDestinationCopy } from "@/data/pdf-copy/types";
+import { provinceToCatalogDestino } from "@/lib/cotizador/provinces";
 
-const BY_DESTINO: Record<string, PdfDestinationCopy> = {
+const BY_CATALOG_DESTINO: Record<string, PdfDestinationCopy> = {
   Iguazú: iguazuPdfCopy,
 };
 
-/** Copy editorial por destino. Hoy solo Iguazú; otros destinos → fallback genérico (sin inventar Iguazú). */
+/**
+ * Editorial PDF copy by destination.
+ * Accepts form selections (provinces) or catalog names; resolves via province map.
+ * Only Iguazú has dedicated copy today; others get a generic fallback.
+ */
 export function getPdfCopy(destino: string): PdfDestinationCopy {
-  const known = BY_DESTINO[destino];
+  const catalogKey = provinceToCatalogDestino(destino) ?? destino;
+  const known = BY_CATALOG_DESTINO[catalogKey];
   if (known) return known;
 
   return {

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { formToFormulaInput } from "@/lib/cotizador/build-input";
 import { calcularCotizacion, FormulaError } from "@/lib/cotizador/formula";
+import { resolveRates } from "@/lib/cotizador/rates";
 import { createTripQuote } from "@/lib/firebase/trip-quotes/repository";
 import { clientPdfFilename, generateCotNumber } from "@/lib/pdf/cot-number";
 import { htmlToPdf } from "@/lib/pdf/generate";
@@ -45,7 +46,10 @@ export async function POST(request: Request) {
   }
 
   try {
-    const formulaInput = formToFormulaInput(parsed.data);
+    // Prefer live sheet rates; fall back to FX_RATES_TO_USD if RATES_URL is
+    // missing or the sheet is unreachable (same policy as the wizard).
+    const { rates } = await resolveRates();
+    const formulaInput = formToFormulaInput(parsed.data, rates);
     const result = calcularCotizacion(formulaInput);
     const generatedAt = new Date().toISOString().slice(0, 10);
     const cotNumber = generateCotNumber();

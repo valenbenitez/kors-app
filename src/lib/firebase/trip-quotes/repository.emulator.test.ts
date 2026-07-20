@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, test } from "vitest";
 import { formToFormulaInput } from "@/lib/cotizador/build-input";
 import { calcularCotizacion } from "@/lib/cotizador/formula";
+import { fallbackFxRates } from "@/lib/cotizador/rates";
 import { TripQuoteNotFoundError } from "@/lib/firebase/errors";
 import {
   createTripQuote,
@@ -33,7 +34,7 @@ if (!emulatorHost) {
     test("createTripQuote + getTripQuoteById roundtrip", async () => {
       const form = buildCot0010Form();
       const result = calcularCotizacion({
-        ...formToFormulaInput(form),
+        ...formToFormulaInput(form, fallbackFxRates()),
         tcArsUsd: 1420,
       });
 
