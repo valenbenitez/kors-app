@@ -372,3 +372,343 @@ describe("CotizadorWizard — campos vuelo/hotel prefill", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("CotizadorWizard — AI flight image prefill", () => {
+  function extractCalls() {
+    return fetchMock.mock.calls.filter(
+      ([url]) =>
+        typeof url === "string" && url.includes("/api/extract-quote-image"),
+    );
+  }
+
+  function vueloExtractResponse(
+    overrides: Record<string, unknown> = {},
+  ): Response {
+    return {
+      ok: true,
+      json: async () => ({
+        tipo: "vuelo",
+        fields: {
+          aerolinea: "Aerolíneas Argentinas",
+          vueloIdaFecha: "2026-08-10",
+          vueloIdaHoraSalida: "20:58",
+          vueloIdaHoraLlegada: "22:52",
+          vueloIdaNumero: "AR3150",
+          vueloIdaAeropuertoSalida: "EZE",
+          vueloIdaAeropuertoLlegada: "IGR",
+          vueloVueltaFecha: "2026-08-15",
+          vueloVueltaHoraSalida: "18:10",
+          vueloVueltaHoraLlegada: "20:05",
+          vueloVueltaNumero: "AR3151",
+          vueloVueltaAeropuertoSalida: "IGR",
+          vueloVueltaAeropuertoLlegada: "EZE",
+          vueloIdaAdultoArs: 180000,
+          vueloVueltaAdultoArs: 175000,
+          moneda: "ARS",
+          ...overrides,
+        },
+        warnings: ["Horario de escala ambiguo"],
+      }),
+    } as unknown as Response;
+  }
+
+  it("shows flight-only upload control on step 0", async () => {
+    render(<CotizadorWizard />);
+    await waitForRatesReady();
+
+    expect(
+      screen.getByText("Prefill desde imagen de vuelo"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Subir imagen de vuelo" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Prefill desde imagen de hotel"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("rejects unsupported file types client-side without calling extract", async () => {
+    render(<CotizadorWizard />);
+    await waitForRatesReady();
+
+    const input = document.querySelector(
+      'input[type="file"][accept*="image/jpeg"]',
+    ) as HTMLInputElement;
+    expect(input).toBeTruthy();
+
+    const bad = new File(["hello"], "itinerary.gif", { type: "image/gif" });
+    // Bypass browser accept filtering so client-side mime validation runs.
+    fireEvent.change(input, { target: { files: [bad] } });
+
+    expect(
+      await screen.findByText(/Formato no soportado/i),
+    ).toBeInTheDocument();
+    expect(extractCalls()).toHaveLength(0);
+  });
+
+  it("on upload calls extract with tipo=vuelo and prefills flight fields", async () => {
+    fetchMock.mockImplementation((input) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.includes("/api/rates")) {
+        return Promise.resolve(ratesResponse());
+      }
+      if (url.includes("/api/extract-quote-image")) {
+        return Promise.resolve(vueloExtractResponse());
+      }
+      return Promise.resolve(pdfResponse());
+    });
+
+    const user = userEvent.setup();
+    render(<CotizadorWizard />);
+    await waitForRatesReady();
+
+    // Preserve client fields — type them first
+    await user.type(
+      screen.getByLabelText("Nombre completo"),
+      "Cliente Intacta",
+    );
+    await user.type(screen.getByLabelText("WhatsApp"), "+54 9 11 99999999");
+
+    const input = document.querySelector(
+      'input[type="file"][accept*="image/jpeg"]',
+    ) as HTMLInputElement;
+    const image = new File(["fake-png"], "vuelo.png", { type: "image/png" });
+    await user.upload(input, image);
+
+    await waitFor(() => expect(extractCalls()).toHaveLength(1));
+    const extractCall = extractCalls()[0];
+    expect(extractCall).toBeDefined();
+    const init = extractCall?.[1];
+    expect(init).toEqual(expect.objectContaining({ method: "POST" }));
+    const body = init?.body as FormData;
+    expect(body.get("tipo")).toBe("vuelo");
+    expect(body.get("image")).toBeInstanceOf(File);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Aerolínea (opcional)")).toHaveValue(
+        "Aerolíneas Argentinas",
+      );
+    });
+    expect(screen.getByLabelText("Fecha ida")).toHaveValue("2026-08-10");
+    expect(screen.getByLabelText("Fecha vuelta")).toHaveValue("2026-08-15");
+    expect(screen.getByLabelText("Número de vuelo ida")).toHaveValue("AR3150");
+    expect(screen.getByLabelText("Aeropuerto salida ida (IATA)")).toHaveValue(
+      "EZE",
+    );
+    expect(screen.getByLabelText("Número de vuelo vuelta")).toHaveValue(
+      "AR3151",
+    );
+
+    // Client fields untouched
+    expect(screen.getByLabelText("Nombre completo")).toHaveValue(
+      "Cliente Intacta",
+    );
+    expect(screen.getByLabelText("WhatsApp")).toHaveValue("+54 9 11 99999999");
+
+    // Feedback lists filled fields + API warnings; fields stay editable
+    const status = await screen.findByText(/Campos completados/i);
+    expect(status).toBeInTheDocument();
+    expect(screen.getByText("Aerolínea")).toBeInTheDocument();
+    expect(screen.getByText("Horario de escala ambiguo")).toBeInTheDocument();
+    expect(screen.getByLabelText("Número de vuelo ida")).not.toBeDisabled();
+  });
+
+  it("shows readable API errors", async () => {
+    fetchMock.mockImplementation((input) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.includes("/api/rates")) {
+        return Promise.resolve(ratesResponse());
+      }
+      if (url.includes("/api/extract-quote-image")) {
+        return Promise.resolve({
+          ok: false,
+          json: async () => ({
+            error: "La imagen no es legible. Probá con otra captura más clara.",
+          }),
+        } as unknown as Response);
+      }
+      return Promise.resolve(pdfResponse());
+    });
+
+    const user = userEvent.setup();
+    render(<CotizadorWizard />);
+    await waitForRatesReady();
+
+    const input = document.querySelector(
+      'input[type="file"][accept*="image/jpeg"]',
+    ) as HTMLInputElement;
+    await user.upload(
+      input,
+      new File(["x"], "blur.png", { type: "image/png" }),
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /no es legible/i,
+    );
+  });
+});
+
+describe("CotizadorWizard — AI hotel image prefill", () => {
+  function extractCalls() {
+    return fetchMock.mock.calls.filter(
+      ([url]) =>
+        typeof url === "string" && url.includes("/api/extract-quote-image"),
+    );
+  }
+
+  function hotelExtractResponse(
+    overrides: Record<string, unknown> = {},
+  ): Response {
+    return {
+      ok: true,
+      json: async () => ({
+        tipo: "hotel",
+        fields: {
+          hotelNombre: "Hotel Saint George",
+          hotelCategoria: "4★",
+          hotelUbicacion: "Puerto Iguazú",
+          hotelHabitacion: "Twin Master",
+          hotelRegimen: "Desayuno",
+          hotelIncluye: "WiFi\nPileta",
+          hotelExcluye: "Spa",
+          hotelCondiciones: "No reembolsable",
+          hotelAdultoArs: 213788,
+          hotelTotalDetectado: 427575,
+          hotelEstadiaDetalle: "3 noches · 2 adultos",
+          moneda: "ARS",
+          ...overrides,
+        },
+        warnings: [
+          "Precio por adulto = total 427575 ÷ 2 adultos (redondeo HALF_UP a entero)",
+        ],
+      }),
+    } as unknown as Response;
+  }
+
+  async function goToCostos(user: UserEvent) {
+    await waitForRatesReady();
+    await fillStep0(user);
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await screen.findByText("Prefill desde imagen de hotel");
+  }
+
+  it("shows hotel upload on costos step, independent of flight upload", async () => {
+    const user = userEvent.setup();
+    render(<CotizadorWizard />);
+    await goToCostos(user);
+
+    expect(
+      screen.getByText("Prefill desde imagen de hotel"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Subir imagen de hotel" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Prefill desde imagen de vuelo"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("calls extract with tipo=hotel and paxAdultos, prefills only that destino", async () => {
+    fetchMock.mockImplementation((input) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.includes("/api/rates")) {
+        return Promise.resolve(ratesResponse());
+      }
+      if (url.includes("/api/extract-quote-image")) {
+        return Promise.resolve(hotelExtractResponse());
+      }
+      return Promise.resolve(pdfResponse());
+    });
+
+    const user = userEvent.setup();
+    render(<CotizadorWizard />);
+    await waitForRatesReady();
+    await fillStep0(user);
+    // Two destinos: hotel upload for Misiones must not touch Salta
+    await user.click(screen.getByRole("button", { name: "Salta" }));
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await screen.findAllByText("Prefill desde imagen de hotel");
+
+    const hotelUploads = screen.getAllByRole("button", {
+      name: "Subir imagen de hotel",
+    });
+    expect(hotelUploads).toHaveLength(2);
+
+    const fileInputs = document.querySelectorAll(
+      'input[type="file"][accept*="image/jpeg"]',
+    );
+    expect(fileInputs.length).toBe(2);
+
+    const image = new File(["fake-png"], "hotel.png", { type: "image/png" });
+    await user.upload(fileInputs[0] as HTMLInputElement, image);
+
+    await waitFor(() => expect(extractCalls()).toHaveLength(1));
+    const extractCall = extractCalls()[0];
+    const init = extractCall?.[1];
+    const body = init?.body as FormData;
+    expect(body.get("tipo")).toBe("hotel");
+    expect(body.get("paxAdultos")).toBe("1");
+    expect(body.get("image")).toBeInstanceOf(File);
+
+    await waitFor(() => {
+      expect(
+        screen.getByDisplayValue("Hotel Saint George"),
+      ).toBeInTheDocument();
+    });
+    expect(screen.getByDisplayValue("Puerto Iguazú")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Twin Master")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Desayuno")).toBeInTheDocument();
+    expect(
+      document.getElementById("hotelIncluye-0") as HTMLTextAreaElement,
+    ).toHaveValue("WiFi\nPileta");
+    expect(
+      document.getElementById("hotelExcluye-0") as HTMLTextAreaElement,
+    ).toHaveValue("Spa");
+    expect(
+      document.getElementById("hotelIncluye-1") as HTMLTextAreaElement,
+    ).toHaveValue("");
+    expect(screen.getByDisplayValue("213.788")).toBeInTheDocument();
+
+    // Only one destino got the hotel name (Misiones); Salta stays empty.
+    expect(screen.getAllByDisplayValue("Hotel Saint George")).toHaveLength(1);
+    expect(screen.getByText("Salta")).toBeInTheDocument();
+
+    expect(await screen.findByText(/Campos completados/i)).toBeInTheDocument();
+    expect(screen.getByText("Hotel por adulto")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Hotel Saint George")).not.toBeDisabled();
+  });
+
+  it("shows readable API errors on hotel upload", async () => {
+    fetchMock.mockImplementation((input) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.includes("/api/rates")) {
+        return Promise.resolve(ratesResponse());
+      }
+      if (url.includes("/api/extract-quote-image")) {
+        return Promise.resolve({
+          ok: false,
+          json: async () => ({
+            error: "La imagen no es legible. Probá con otra captura más clara.",
+          }),
+        } as unknown as Response);
+      }
+      return Promise.resolve(pdfResponse());
+    });
+
+    const user = userEvent.setup();
+    render(<CotizadorWizard />);
+    await goToCostos(user);
+
+    const input = document.querySelector(
+      'input[type="file"][accept*="image/jpeg"]',
+    ) as HTMLInputElement;
+    await user.upload(
+      input,
+      new File(["x"], "blur.png", { type: "image/png" }),
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /no es legible/i,
+    );
+  });
+});

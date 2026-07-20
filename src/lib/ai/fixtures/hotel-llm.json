@@ -1,0 +1,16 @@
+{
+  "imageReadable": true,
+  "isHotelDocument": true,
+  "name": "Iguazú Grand Hotel Resort & Casino",
+  "starsRaw": "4 stars",
+  "totalPrice": 100001,
+  "currency": "ARS",
+  "ubicacion": "Puerto Iguazú, Misiones",
+  "stayDetail": "3 noches · 2 adultos · check-in 10/08",
+  "roomType": "Habitación Superior Doble",
+  "regimen": "Desayuno buffet",
+  "includes": "WiFi\nPileta\nEstacionamiento",
+  "excludes": "Spa\nExcursiones",
+  "conditions": "No reembolsable\nCancelación gratis hasta 48h antes",
+  "warnings": ["Precio total parece incluir impuestos"]
+}

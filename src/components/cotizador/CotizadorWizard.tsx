@@ -9,6 +9,7 @@ import {
   useForm,
   useWatch,
 } from "react-hook-form";
+import { ImagePrefillUpload } from "@/components/cotizador/ImagePrefillUpload";
 import { CURRENCY_UI, MoneyField } from "@/components/cotizador/MoneyField";
 import { PdfPreview } from "@/components/pdf/PdfPreview";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,7 @@ import {
   fallbackFxRates,
   isFxRatesMap,
 } from "@/lib/cotizador/rates";
+import { cn } from "@/lib/utils";
 import {
   type CotizacionFormInput,
   cotizacionFormSchema,
@@ -123,6 +125,22 @@ export function CotizadorWizard() {
   // Guard reentrante: garantiza como máximo una petición activa aunque
   // lleguen submits concurrentes (doble click / doble Enter) antes del rerender.
   const isGeneratingRef = useRef(false);
+  /** Form paths filled by flight image prefill — used for visual highlight. */
+  const [prefilledFlightPaths, setPrefilledFlightPaths] = useState<string[]>(
+    [],
+  );
+  /** Form paths filled by hotel image prefill — used for visual highlight. */
+  const [prefilledHotelPaths, setPrefilledHotelPaths] = useState<string[]>([]);
+
+  function prefillClass(path: string): string | undefined {
+    if (
+      !prefilledFlightPaths.includes(path) &&
+      !prefilledHotelPaths.includes(path)
+    ) {
+      return undefined;
+    }
+    return "ring-2 ring-primary/40 bg-primary/5";
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -181,11 +199,28 @@ export function CotizadorWizard() {
     name: "destinos",
   });
 
+  const paxAdultos = useWatch({ control, name: "paxAdultos" }) ?? 0;
   const paxMenores = useWatch({ control, name: "paxMenores" }) ?? 0;
   const destinosSeleccionados =
     useWatch({ control, name: "destinosSeleccionados" }) ?? [];
   const fechaIda = useWatch({ control, name: "fechaIda" }) ?? "";
+  const fechaVuelta = useWatch({ control, name: "fechaVuelta" }) ?? "";
   const destinosWatch = useWatch({ control, name: "destinos" }) ?? [];
+
+  // Keep segment flight dates in sync with trip-level dates (PDF reads segment fechas).
+  useEffect(() => {
+    setValue("vueloIdaFecha", fechaIda, {
+      shouldDirty: false,
+      shouldValidate: false,
+    });
+  }, [fechaIda, setValue]);
+
+  useEffect(() => {
+    setValue("vueloVueltaFecha", fechaVuelta, {
+      shouldDirty: false,
+      shouldValidate: false,
+    });
+  }, [fechaVuelta, setValue]);
 
   const excursionsByDestino = useMemo(() => {
     const map: Record<string, CatalogExcursion[]> = {};
@@ -441,19 +476,30 @@ export function CotizadorWizard() {
                   ))}
                 </select>
               </div>
-              <div className="space-y-2">
+              <div className="flex min-w-0 flex-col space-y-2">
                 <Label htmlFor="fechaIda">Fecha ida</Label>
-                <Input id="fechaIda" type="date" {...register("fechaIda")} />
+                <Input
+                  id="fechaIda"
+                  type="date"
+                  className={prefillClass("fechaIda")}
+                  {...register("fechaIda")}
+                />
                 <FieldError message={errors.fechaIda?.message} />
               </div>
-              <div className="space-y-2">
+              <div className="flex min-w-0 flex-col space-y-2">
                 <Label htmlFor="fechaVuelta">Fecha vuelta</Label>
                 <Input
                   id="fechaVuelta"
                   type="date"
+                  className={prefillClass("fechaVuelta")}
                   {...register("fechaVuelta")}
                 />
-                <FieldError message={errors.fechaVuelta?.message} />
+                <FieldError
+                  message={
+                    errors.fechaVuelta?.message ??
+                    errors.vueloVueltaFecha?.message
+                  }
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="paxAdultos">Adultos</Label>
@@ -522,46 +568,52 @@ export function CotizadorWizard() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="aerolinea">Aerolínea (opcional)</Label>
-                <Input id="aerolinea" {...register("aerolinea")} />
+                <Input
+                  id="aerolinea"
+                  className={prefillClass("aerolinea")}
+                  {...register("aerolinea")}
+                />
               </div>
             </div>
+
+            <ImagePrefillUpload
+              tipo="vuelo"
+              setValue={setValue}
+              getValues={getValues}
+              onPrefill={setPrefilledFlightPaths}
+            />
 
             <div className="space-y-4 rounded-2xl border border-border p-4">
               <h3 className="text-sm font-semibold">Vuelo ida (opcional)</h3>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                <div className="space-y-2">
-                  <Label htmlFor="vueloIdaFecha">Fecha</Label>
-                  <Input
-                    id="vueloIdaFecha"
-                    type="date"
-                    {...register("vueloIdaFecha")}
-                  />
-                </div>
-                <div className="space-y-2">
+                <div className="flex min-w-0 flex-col space-y-2">
                   <Label htmlFor="vueloIdaHoraSalida">Hora salida</Label>
                   <Input
                     id="vueloIdaHoraSalida"
                     type="time"
+                    className={prefillClass("vueloIdaHoraSalida")}
                     {...register("vueloIdaHoraSalida")}
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="flex min-w-0 flex-col space-y-2">
                   <Label htmlFor="vueloIdaHoraLlegada">Hora llegada</Label>
                   <Input
                     id="vueloIdaHoraLlegada"
                     type="time"
+                    className={prefillClass("vueloIdaHoraLlegada")}
                     {...register("vueloIdaHoraLlegada")}
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="flex min-w-0 flex-col space-y-2">
                   <Label htmlFor="vueloIdaNumero">Número de vuelo ida</Label>
                   <Input
                     id="vueloIdaNumero"
                     placeholder="ej. 3150"
+                    className={prefillClass("vueloIdaNumero")}
                     {...register("vueloIdaNumero")}
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="flex min-w-0 flex-col space-y-2">
                   <Label htmlFor="vueloIdaAeropuertoSalida">
                     Aeropuerto salida ida (IATA)
                   </Label>
@@ -569,11 +621,14 @@ export function CotizadorWizard() {
                     id="vueloIdaAeropuertoSalida"
                     placeholder="EZE"
                     maxLength={3}
-                    className="uppercase"
+                    className={cn(
+                      "uppercase",
+                      prefillClass("vueloIdaAeropuertoSalida"),
+                    )}
                     {...register("vueloIdaAeropuertoSalida")}
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="flex min-w-0 flex-col space-y-2">
                   <Label htmlFor="vueloIdaAeropuertoLlegada">
                     Aeropuerto llegada ida (IATA)
                   </Label>
@@ -581,52 +636,49 @@ export function CotizadorWizard() {
                     id="vueloIdaAeropuertoLlegada"
                     placeholder="IGR"
                     maxLength={3}
-                    className="uppercase"
+                    className={cn(
+                      "uppercase",
+                      prefillClass("vueloIdaAeropuertoLlegada"),
+                    )}
                     {...register("vueloIdaAeropuertoLlegada")}
                   />
                 </div>
               </div>
-              <FieldError message={errors.vueloIdaFecha?.message} />
             </div>
 
             <div className="space-y-4 rounded-2xl border border-border p-4">
               <h3 className="text-sm font-semibold">Vuelo vuelta (opcional)</h3>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                <div className="space-y-2">
-                  <Label htmlFor="vueloVueltaFecha">Fecha</Label>
-                  <Input
-                    id="vueloVueltaFecha"
-                    type="date"
-                    {...register("vueloVueltaFecha")}
-                  />
-                </div>
-                <div className="space-y-2">
+                <div className="flex min-w-0 flex-col space-y-2">
                   <Label htmlFor="vueloVueltaHoraSalida">Hora salida</Label>
                   <Input
                     id="vueloVueltaHoraSalida"
                     type="time"
+                    className={prefillClass("vueloVueltaHoraSalida")}
                     {...register("vueloVueltaHoraSalida")}
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="flex min-w-0 flex-col space-y-2">
                   <Label htmlFor="vueloVueltaHoraLlegada">Hora llegada</Label>
                   <Input
                     id="vueloVueltaHoraLlegada"
                     type="time"
+                    className={prefillClass("vueloVueltaHoraLlegada")}
                     {...register("vueloVueltaHoraLlegada")}
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="flex min-w-0 flex-col space-y-2">
                   <Label htmlFor="vueloVueltaNumero">
                     Número de vuelo vuelta
                   </Label>
                   <Input
                     id="vueloVueltaNumero"
                     placeholder="ej. 3151"
+                    className={prefillClass("vueloVueltaNumero")}
                     {...register("vueloVueltaNumero")}
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="flex min-w-0 flex-col space-y-2">
                   <Label htmlFor="vueloVueltaAeropuertoSalida">
                     Aeropuerto salida vuelta (IATA)
                   </Label>
@@ -634,11 +686,14 @@ export function CotizadorWizard() {
                     id="vueloVueltaAeropuertoSalida"
                     placeholder="IGR"
                     maxLength={3}
-                    className="uppercase"
+                    className={cn(
+                      "uppercase",
+                      prefillClass("vueloVueltaAeropuertoSalida"),
+                    )}
                     {...register("vueloVueltaAeropuertoSalida")}
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="flex min-w-0 flex-col space-y-2">
                   <Label htmlFor="vueloVueltaAeropuertoLlegada">
                     Aeropuerto llegada vuelta (IATA)
                   </Label>
@@ -646,12 +701,14 @@ export function CotizadorWizard() {
                     id="vueloVueltaAeropuertoLlegada"
                     placeholder="EZE"
                     maxLength={3}
-                    className="uppercase"
+                    className={cn(
+                      "uppercase",
+                      prefillClass("vueloVueltaAeropuertoLlegada"),
+                    )}
                     {...register("vueloVueltaAeropuertoLlegada")}
                   />
                 </div>
               </div>
-              <FieldError message={errors.vueloVueltaFecha?.message} />
             </div>
 
             <div className="space-y-2">
@@ -811,14 +868,32 @@ export function CotizadorWizard() {
                         />
                       </div>
                     ) : null}
+                    <div className="space-y-2 sm:col-span-2">
+                      <ImagePrefillUpload
+                        tipo="hotel"
+                        destinoIndex={index}
+                        paxAdultos={Number(paxAdultos)}
+                        setValue={setValue}
+                        getValues={getValues}
+                        onPrefill={setPrefilledHotelPaths}
+                      />
+                    </div>
                     <div className="space-y-2">
                       <Label>Nombre hotel</Label>
-                      <Input {...register(`destinos.${index}.hotelNombre`)} />
+                      <Input
+                        className={prefillClass(
+                          `destinos.${index}.hotelNombre`,
+                        )}
+                        {...register(`destinos.${index}.hotelNombre`)}
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label>Categoría</Label>
                       <select
-                        className="h-9 w-full rounded-4xl border border-border bg-background px-3 text-sm"
+                        className={cn(
+                          "h-9 w-full rounded-4xl border border-border bg-background px-3 text-sm",
+                          prefillClass(`destinos.${index}.hotelCategoria`),
+                        )}
                         {...register(`destinos.${index}.hotelCategoria`)}
                       >
                         <option value="">—</option>
@@ -831,17 +906,28 @@ export function CotizadorWizard() {
                     </div>
                     <div className="space-y-2">
                       <Label>Régimen</Label>
-                      <Input {...register(`destinos.${index}.hotelRegimen`)} />
+                      <Input
+                        className={prefillClass(
+                          `destinos.${index}.hotelRegimen`,
+                        )}
+                        {...register(`destinos.${index}.hotelRegimen`)}
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label>Ubicación</Label>
                       <Input
+                        className={prefillClass(
+                          `destinos.${index}.hotelUbicacion`,
+                        )}
                         {...register(`destinos.${index}.hotelUbicacion`)}
                       />
                     </div>
                     <div className="space-y-2">
                       <Label>Tipo habitación</Label>
                       <Input
+                        className={prefillClass(
+                          `destinos.${index}.hotelHabitacion`,
+                        )}
                         {...register(`destinos.${index}.hotelHabitacion`)}
                       />
                     </div>
@@ -852,7 +938,10 @@ export function CotizadorWizard() {
                       <textarea
                         id={`hotelIncluye-${index}`}
                         rows={2}
-                        className="w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm"
+                        className={cn(
+                          "w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm",
+                          prefillClass(`destinos.${index}.hotelIncluye`),
+                        )}
                         placeholder="Una línea por ítem…"
                         {...register(`destinos.${index}.hotelIncluye`)}
                       />
@@ -864,7 +953,10 @@ export function CotizadorWizard() {
                       <textarea
                         id={`hotelExcluye-${index}`}
                         rows={2}
-                        className="w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm"
+                        className={cn(
+                          "w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm",
+                          prefillClass(`destinos.${index}.hotelExcluye`),
+                        )}
                         placeholder="Una línea por ítem…"
                         {...register(`destinos.${index}.hotelExcluye`)}
                       />
@@ -876,7 +968,10 @@ export function CotizadorWizard() {
                       <textarea
                         id={`hotelCondiciones-${index}`}
                         rows={2}
-                        className="w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm"
+                        className={cn(
+                          "w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm",
+                          prefillClass(`destinos.${index}.hotelCondiciones`),
+                        )}
                         placeholder="Check-in, políticas, notas…"
                         {...register(`destinos.${index}.hotelCondiciones`)}
                       />

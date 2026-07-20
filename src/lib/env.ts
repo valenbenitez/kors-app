@@ -144,3 +144,27 @@ export function getFirebaseClientEnv(): FirebaseClientEnv {
 
   return parsed.data;
 }
+
+const aiGatewayEnvSchema = z.object({
+  AI_GATEWAY_API_KEY: z.string().min(1),
+});
+
+export type AiGatewayEnv = z.infer<typeof aiGatewayEnvSchema>;
+
+/**
+ * Server-only Vercel AI Gateway credentials.
+ * Required only when calling vision extract — not during `./init.sh` / unit tests.
+ */
+export function getAiGatewayEnv(): AiGatewayEnv {
+  const parsed = aiGatewayEnvSchema.safeParse({
+    AI_GATEWAY_API_KEY: process.env.AI_GATEWAY_API_KEY,
+  });
+
+  if (!parsed.success) {
+    throw new Error(
+      "Invalid or missing AI_GATEWAY_API_KEY. Copy .env.example to .env.local and set the Vercel AI Gateway key.",
+    );
+  }
+
+  return parsed.data;
+}

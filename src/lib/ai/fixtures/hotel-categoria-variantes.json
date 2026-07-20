@@ -1,0 +1,16 @@
+{
+  "imageReadable": true,
+  "isHotelDocument": true,
+  "name": "Hotel Cataratas",
+  "starsRaw": "4 estrellas",
+  "totalPrice": 450000,
+  "currency": "ARS",
+  "ubicacion": "Iguazú",
+  "stayDetail": "2 noches",
+  "roomType": "Standard",
+  "regimen": "",
+  "includes": "Desayuno",
+  "excludes": "",
+  "conditions": "",
+  "warnings": []
+}

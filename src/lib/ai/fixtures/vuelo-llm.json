@@ -1,0 +1,23 @@
+{
+  "imageReadable": true,
+  "isFlightDocument": true,
+  "airline": "Aerolíneas Argentinas",
+  "idaFecha": "2026-08-10",
+  "idaHoraSalida": "20:58",
+  "idaHoraLlegada": "22:52",
+  "idaNumero": "AR3150",
+  "idaAeropuertoSalida": "eze",
+  "idaAeropuertoLlegada": "Buenos Aires (IGR)",
+  "vueltaFecha": "2026-08-15",
+  "vueltaHoraSalida": "18:10",
+  "vueltaHoraLlegada": "20:05",
+  "vueltaNumero": "AR3151",
+  "vueltaAeropuertoSalida": "IGR",
+  "vueltaAeropuertoLlegada": "EZE",
+  "precioIdaAdulto": 180000,
+  "precioIdaMenor": null,
+  "precioVueltaAdulto": 175000,
+  "precioVueltaMenor": null,
+  "currency": "ARS",
+  "warnings": []
+}

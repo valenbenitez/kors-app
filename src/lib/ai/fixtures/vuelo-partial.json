@@ -1,0 +1,23 @@
+{
+  "imageReadable": true,
+  "isFlightDocument": true,
+  "airline": "LATAM",
+  "idaFecha": "10/08/2026",
+  "idaHoraSalida": "8:5",
+  "idaHoraLlegada": "",
+  "idaNumero": "LA4001",
+  "idaAeropuertoSalida": "Buenos Aires",
+  "idaAeropuertoLlegada": "xyz1",
+  "vueltaFecha": "",
+  "vueltaHoraSalida": "",
+  "vueltaHoraLlegada": "",
+  "vueltaNumero": "",
+  "vueltaAeropuertoSalida": "",
+  "vueltaAeropuertoLlegada": "",
+  "precioIdaAdulto": null,
+  "precioIdaMenor": null,
+  "precioVueltaAdulto": null,
+  "precioVueltaMenor": null,
+  "currency": "",
+  "warnings": []
+}
