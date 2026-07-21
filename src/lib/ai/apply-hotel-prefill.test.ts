@@ -22,7 +22,8 @@ function baseFields(
     hotelIncluye: "WiFi\nPileta",
     hotelExcluye: "Spa",
     hotelCondiciones: "No reembolsable",
-    hotelAdultoArs: 213788,
+    hotelNoches: 3,
+    hotelAdultoNocheArs: 71_263,
     hotelTotalDetectado: 427575,
     hotelEstadiaDetalle: "3 noches · 2 adultos",
     moneda: "ARS",
@@ -61,7 +62,7 @@ describe("applyHotelPrefill", () => {
     misiones.vueloIdaAdultoArs = 180000;
     const salta = emptyDestino("Salta");
     salta.hotelNombre = "Otro Hotel";
-    salta.hotelAdultoArs = 999;
+    salta.hotelAdultoNocheArs = 999;
     const values: CotizacionFormInput = {
       ...defaultCotizacionValues,
       aerolinea: "Aerolíneas Argentinas",
@@ -83,15 +84,18 @@ describe("applyHotelPrefill", () => {
     expect(values.destinos[0]?.hotelIncluye).toBe("WiFi\nPileta");
     expect(values.destinos[0]?.hotelExcluye).toBe("Spa");
     expect(values.destinos[0]?.hotelCondiciones).toBe("No reembolsable");
-    expect(values.destinos[0]?.hotelAdultoArs).toBe(213788);
+    expect(values.destinos[0]?.hotelNoches).toBe(3);
+    expect(values.destinos[0]?.hotelAdultoNocheArs).toBe(71_263);
     expect(values.destinos[0]?.moneda).toBe("ARS");
 
     // Other destino untouched
     expect(values.destinos[1]?.hotelNombre).toBe("Otro Hotel");
-    expect(values.destinos[1]?.hotelAdultoArs).toBe(999);
+    expect(values.destinos[1]?.hotelAdultoNocheArs).toBe(999);
 
     expect(result.filledLabels).toContain(HOTEL_PREFILL_LABELS.hotelNombre);
-    expect(result.filledLabels).toContain(HOTEL_PREFILL_LABELS.hotelAdultoArs);
+    expect(result.filledLabels).toContain(
+      HOTEL_PREFILL_LABELS.hotelAdultoNocheArs,
+    );
     expect(
       setValue.mock.calls.every(([path]) =>
         String(path).startsWith("destinos.0."),
@@ -102,7 +106,7 @@ describe("applyHotelPrefill", () => {
   it("prefills destino index 1 without touching destinos.0", () => {
     const misiones = emptyDestino("Misiones");
     misiones.hotelNombre = "Keep Me";
-    misiones.hotelAdultoArs = 50_000;
+    misiones.hotelAdultoNocheArs = 50_000;
     const values: CotizacionFormInput = {
       ...defaultCotizacionValues,
       destinos: [misiones, emptyDestino("Salta")],
@@ -112,14 +116,14 @@ describe("applyHotelPrefill", () => {
     applyHotelPrefill(baseFields(), setValue as never, 1);
 
     expect(values.destinos[0]?.hotelNombre).toBe("Keep Me");
-    expect(values.destinos[0]?.hotelAdultoArs).toBe(50_000);
+    expect(values.destinos[0]?.hotelAdultoNocheArs).toBe(50_000);
     expect(values.destinos[1]?.hotelNombre).toBe("Hotel Saint George");
-    expect(values.destinos[1]?.hotelAdultoArs).toBe(213788);
+    expect(values.destinos[1]?.hotelAdultoNocheArs).toBe(71_263);
   });
 
-  it("skips empty strings and zero hotelAdultoArs", () => {
+  it("skips empty strings and zero hotelAdultoNocheArs", () => {
     const misiones = emptyDestino("Misiones");
-    misiones.hotelAdultoArs = 12_000;
+    misiones.hotelAdultoNocheArs = 12_000;
     const values: CotizacionFormInput = {
       ...defaultCotizacionValues,
       destinos: [misiones],
@@ -136,7 +140,8 @@ describe("applyHotelPrefill", () => {
         hotelIncluye: "",
         hotelExcluye: "",
         hotelCondiciones: "",
-        hotelAdultoArs: 0,
+        hotelNoches: 0,
+        hotelAdultoNocheArs: 0,
         hotelTotalDetectado: 0,
         moneda: undefined,
       }),
@@ -145,11 +150,11 @@ describe("applyHotelPrefill", () => {
     );
 
     expect(values.destinos[0]?.hotelNombre).toBe("Solo Nombre");
-    expect(values.destinos[0]?.hotelAdultoArs).toBe(12_000);
+    expect(values.destinos[0]?.hotelAdultoNocheArs).toBe(12_000);
     expect(result.filledPaths).toEqual(["destinos.0.hotelNombre"]);
     expect(
       setValue.mock.calls.some(([path]) =>
-        String(path).includes("hotelAdultoArs"),
+        String(path).includes("hotelAdultoNocheArs"),
       ),
     ).toBe(false);
   });

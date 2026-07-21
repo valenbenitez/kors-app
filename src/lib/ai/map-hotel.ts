@@ -14,20 +14,37 @@ import {
 Decimal.set({ precision: 28, rounding: Decimal.ROUND_HALF_UP });
 
 /**
- * Rounding policy for hotelAdultoArs:
- * `Decimal(total).div(paxAdultos)` with ROUND_HALF_UP to **0 decimal places**
- * (integer pesos). Matches MoneyField ARS/CLP/COP UI (decimals: 0).
- * Example: total 100_001 ÷ 2 → 50_001.
+ * Parses nights from stay-detail text (e.g. "3 noches", "1 noche").
+ * Returns null when no nights phrase is found.
  */
-export function computeHotelAdultoArs(
+export function parseNightsFromStayDetail(stayDetail: string): number | null {
+  const match = stayDetail.match(/(\d+)\s*noches?/i);
+  if (!match?.[1]) return null;
+  const n = Number.parseInt(match[1], 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/**
+ * Rounding policy for hotelAdultoNocheArs when OCR gives a stay total:
+ * `Decimal(total).div(paxAdultos).div(nights)` with ROUND_HALF_UP to
+ * **0 decimal places** (integer pesos).
+ * Documented conversion: stay total ÷ adults ÷ nights → per-adult per-night.
+ * Example: total 100_001 ÷ 2 ÷ 3 → 16_667.
+ */
+export function computeHotelAdultoNocheArs(
   total: number,
   paxAdultos: number,
+  nights: number,
 ): number {
   if (paxAdultos < 1) {
     throw new Error("paxAdultos must be >= 1");
   }
+  if (nights < 1) {
+    throw new Error("nights must be >= 1");
+  }
   return new Decimal(total)
     .div(paxAdultos)
+    .div(nights)
     .toDecimalPlaces(0, Decimal.ROUND_HALF_UP)
     .toNumber();
 }
@@ -108,6 +125,12 @@ export type MapHotelResult = {
 /**
  * Maps LLM hotel extract → form prefill fields.
  * Throws named domain errors for unreadable / mismatch / empty extracts.
+ *
+ * Price conversion when totalPrice is present:
+ * - If nights parseable from stayDetail → hotelNoches = N and
+ *   hotelAdultoNocheArs = HALF_UP(total ÷ paxAdultos ÷ N).
+ * - If nights not parseable → leave hotelNoches = 0 and hotelAdultoNocheArs = 0
+ *   (do not invent); warn with the detected stay total for the seller to review.
  */
 export function mapHotelExtract(input: MapHotelInput): MapHotelResult {
   const { llm, paxAdultos, moneda } = input;
@@ -155,8 +178,9 @@ export function mapHotelExtract(input: MapHotelInput): MapHotelResult {
     throw new NothingUsableError("Hotel extract produced no usable fields");
   }
 
-  const hotelAdultoArs =
-    total > 0 ? computeHotelAdultoArs(total, paxAdultos) : 0;
+  const parsedNights = parseNightsFromStayDetail(hotelEstadiaDetalle);
+  let hotelNoches = 0;
+  let hotelAdultoNocheArs = 0;
 
   const warnings = [...llm.warnings];
   if (!llm.imageReadable && hasIdentity) {
@@ -164,11 +188,23 @@ export function mapHotelExtract(input: MapHotelInput): MapHotelResult {
       "El modelo marcó la imagen como poco legible, pero se extrajeron datos de hotel útiles.",
     );
   }
-  if (total > 0) {
+
+  if (total > 0 && parsedNights != null) {
+    hotelNoches = parsedNights;
+    hotelAdultoNocheArs = computeHotelAdultoNocheArs(
+      total,
+      paxAdultos,
+      parsedNights,
+    );
     warnings.push(
-      `Precio por adulto = total ${total} ÷ ${paxAdultos} adultos (redondeo HALF_UP a entero)`,
+      `Precio por adulto/noche = total ${total} ÷ ${paxAdultos} adultos ÷ ${parsedNights} noches (redondeo HALF_UP a entero)`,
+    );
+  } else if (total > 0 && parsedNights == null) {
+    warnings.push(
+      `Total detectado ${total} sin noches parseables en la estadía — no se inventó precio/noche; completar manualmente.`,
     );
   }
+
   if (hotelEstadiaDetalle) {
     warnings.push(`Estadía detectada: ${hotelEstadiaDetalle}`);
   }
@@ -184,7 +220,8 @@ export function mapHotelExtract(input: MapHotelInput): MapHotelResult {
     hotelIncluye,
     hotelExcluye,
     hotelCondiciones,
-    hotelAdultoArs,
+    hotelNoches,
+    hotelAdultoNocheArs,
     hotelTotalDetectado: total,
     hotelEstadiaDetalle,
     ...(resolvedMoneda ? { moneda: resolvedMoneda } : {}),

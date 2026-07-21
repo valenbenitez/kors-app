@@ -80,7 +80,8 @@ Regreso.`,
         ...emptyDestino("Río Negro"),
         vueloIdaAdultoArs: 180_000,
         vueloVueltaAdultoArs: 180_000,
-        hotelAdultoArs: 95_000,
+        hotelNoches: 1,
+        hotelAdultoNocheArs: 95_000,
         hotelNombre: "Hotel Nahuel Huapi",
         hotelCategoria: "4★",
         hotelRegimen: "desayuno incluido",
@@ -293,6 +294,10 @@ describe("renderPdfHtml — structured flight + hotel fields", () => {
     expect(html).toContain("Vuelo vuelta Aerolíneas Argentinas 1621");
     expect(html).toContain("BRC→EZE");
     expect(html).not.toContain("2 vuelos Aerolíneas Argentinas cabotaje");
+    // Dedicated flights section (spec §6.7)
+    expect(html).toContain('class="flights-block"');
+    expect(html).toContain('class="flight-card"');
+    expect(html).toContain("Aerolíneas Argentinas 1620");
   });
 
   it("keeps generic flight fallback when segment fields are empty", () => {
@@ -308,6 +313,40 @@ describe("renderPdfHtml — structured flight + hotel fields", () => {
     expect(html).toContain(
       "2 vuelos Aerolíneas Argentinas cabotaje EZE-BRC-EZE (ida + vuelta) con tasas",
     );
+    expect(html).toContain('class="flights-block"');
+  });
+
+  it("includes equipaje line when package has flights (spec §6.8)", () => {
+    const form = buildBarilocheLeakageForm();
+    form.equipaje = "valija 23 kg";
+    const result = calcularCotizacion(formToFormulaInput(form, rates));
+    const html = renderPdfHtml({
+      cotNumber: "COT-2103",
+      form,
+      result,
+      generatedAt: "2027-01-15",
+    });
+
+    expect(html).toContain(
+      "1 valija despachada hasta 23 kg + equipaje de mano",
+    );
+  });
+
+  it("omits flights section and equipaje when all flight costs are 0", () => {
+    const form = buildBarilocheLeakageForm();
+    form.destinos[0].vueloIdaAdultoArs = 0;
+    form.destinos[0].vueloVueltaAdultoArs = 0;
+    const result = calcularCotizacion(formToFormulaInput(form, rates));
+    const html = renderPdfHtml({
+      cotNumber: "COT-2104",
+      form,
+      result,
+      generatedAt: "2027-01-15",
+    });
+
+    expect(html).not.toContain('class="flights-block"');
+    expect(html).not.toContain("valija despachada");
+    expect(html).not.toContain("Equipaje de mano 10 kg");
   });
 
   it("merges hotel incluye / excluye / condiciones into PDF lists", () => {
@@ -328,6 +367,74 @@ describe("renderPdfHtml — structured flight + hotel fields", () => {
     expect(html).toContain("Pileta climatizada");
     expect(html).toContain("Spa no incluido");
     expect(html).toContain("Check-in desde 15:00");
+  });
+});
+
+describe("renderPdfHtml — multi-destino", () => {
+  function buildMultiDestinoForm(): CotizacionFormInput {
+    const base = buildBarilocheLeakageForm();
+    return {
+      ...base,
+      clienteNombre: "Nina Guerrero",
+      destinosSeleccionados: ["Misiones", "Río Negro"],
+      fechaIda: "2026-11-03",
+      fechaVuelta: "2026-11-11",
+      itinerario: `Día 1 · Mar 03 Nov: Llegada Iguazú
+Check-in.
+
+Día 5 · Sáb 07 Nov: Iguazú → Bariloche
+Conexión.
+
+Día 9 · Mié 11 Nov: Regreso`,
+      destinos: [
+        {
+          ...emptyDestino("Misiones"),
+          vueloIdaAdultoArs: 200_000,
+          vueloVueltaAdultoArs: 0,
+          hotelNoches: 3,
+          hotelAdultoNocheArs: 120_000,
+          hotelNombre: "Yvy Hotel de Selva",
+          hotelCategoria: "4★",
+          hotelRegimen: "desayuno incluido",
+          hotelUbicacion: "Puerto Iguazú",
+          hotelHabitacion: "Doble",
+          excursionIds: ["exc-3"],
+        },
+        {
+          ...emptyDestino("Río Negro"),
+          vueloIdaAdultoArs: 0,
+          vueloVueltaAdultoArs: 180_000,
+          hotelNoches: 4,
+          hotelAdultoNocheArs: 95_000,
+          hotelNombre: "Hotel Nahuel Huapi",
+          hotelCategoria: "4★",
+          hotelRegimen: "desayuno incluido",
+          hotelUbicacion: "Centro Bariloche",
+          hotelHabitacion: "Doble Standard",
+          excursionIds: [],
+        },
+      ],
+    };
+  }
+
+  it("renders 4 pages with both destinations and hotels", () => {
+    const form = buildMultiDestinoForm();
+    const result = calcularCotizacion(formToFormulaInput(form, rates));
+    const html = renderPdfHtml({
+      cotNumber: "COT-3001",
+      form,
+      result,
+      generatedAt: "2026-06-24",
+    });
+
+    expect(html.match(/class="page[\s"]/g)?.length).toBe(4);
+    expect(html).toContain("MISIONES + RÍO NEGRO");
+    expect(html).toContain("Yvy Hotel de Selva");
+    expect(html).toContain("Hotel Nahuel Huapi");
+    expect(html).toContain("MISIONES");
+    expect(html).toContain("RÍO NEGRO");
+    expect(html).toContain("Pág. 4 de 4");
+    expect(html).toContain("Tips y clima");
   });
 });
 

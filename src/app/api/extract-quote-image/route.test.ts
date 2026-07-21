@@ -46,7 +46,8 @@ const hotelResult = {
     hotelIncluye: "WiFi",
     hotelExcluye: "",
     hotelCondiciones: "",
-    hotelAdultoArs: 50_000,
+    hotelAdultoNocheArs: 50_000,
+    hotelNoches: 2,
     hotelTotalDetectado: 100_000,
     hotelEstadiaDetalle: "2 noches",
     moneda: "ARS" as const,
@@ -89,8 +90,7 @@ describe("POST /api/extract-quote-image", () => {
     getSession.mockResolvedValue({ email: "a@kors.com", sub: "uid-1" });
     parseExtractRequest.mockResolvedValue({
       tipo: "hotel",
-      imageBytes: new Uint8Array([1, 2, 3]),
-      mediaType: "image/jpeg",
+      images: [{ bytes: new Uint8Array([1, 2, 3]), mediaType: "image/jpeg" }],
       paxAdultos: 2,
     });
     extractHotelFromImage.mockResolvedValue(hotelResult);
@@ -100,18 +100,124 @@ describe("POST /api/extract-quote-image", () => {
 
     expect(response.status).toBe(200);
     expect(data.tipo).toBe("hotel");
-    expect(data.fields.hotelAdultoArs).toBe(50_000);
+    expect(data.fields.hotelAdultoNocheArs).toBe(50_000);
     expect(data.fields.hotelCategoria).toBe("4★");
     expect(Array.isArray(data.warnings)).toBe(true);
     expect(extractVueloFromImage).not.toHaveBeenCalled();
+    expect(extractHotelFromImage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        images: [
+          { imageBytes: expect.any(Uint8Array), mediaType: "image/jpeg" },
+        ],
+        paxAdultos: 2,
+      }),
+    );
+  });
+
+  test("passes multi-image hotel bundle to extractHotelFromImage", async () => {
+    getSession.mockResolvedValue({ email: "a@kors.com", sub: "uid-1" });
+    parseExtractRequest.mockResolvedValue({
+      tipo: "hotel",
+      images: [
+        { bytes: new Uint8Array([1]), mediaType: "image/png" },
+        { bytes: new Uint8Array([2]), mediaType: "image/jpeg" },
+      ],
+      paxAdultos: 2,
+    });
+    extractHotelFromImage.mockResolvedValue(hotelResult);
+
+    const response = await POST(bareRequest());
+
+    expect(response.status).toBe(200);
+    expect(extractHotelFromImage).toHaveBeenCalledTimes(1);
+    const arg = extractHotelFromImage.mock.calls[0]?.[0] as {
+      images: unknown[];
+    };
+    expect(arg.images).toHaveLength(2);
+  });
+
+  test("passes single-image vuelo to extractVueloFromImage (regression)", async () => {
+    getSession.mockResolvedValue({ email: "a@kors.com", sub: "uid-1" });
+    parseExtractRequest.mockResolvedValue({
+      tipo: "vuelo",
+      images: [{ bytes: new Uint8Array([1]), mediaType: "image/png" }],
+    });
+    extractVueloFromImage.mockResolvedValue({
+      tipo: "vuelo",
+      fields: {
+        aerolinea: "AR",
+        vueloIdaFecha: "2026-08-10",
+        vueloIdaHoraSalida: "",
+        vueloIdaHoraLlegada: "",
+        vueloIdaNumero: "AR3150",
+        vueloIdaAeropuertoSalida: "EZE",
+        vueloIdaAeropuertoLlegada: "IGR",
+        vueloVueltaFecha: "",
+        vueloVueltaHoraSalida: "",
+        vueloVueltaHoraLlegada: "",
+        vueloVueltaNumero: "",
+        vueloVueltaAeropuertoSalida: "",
+        vueloVueltaAeropuertoLlegada: "",
+      },
+      warnings: [],
+    });
+
+    const response = await POST(bareRequest());
+
+    expect(response.status).toBe(200);
+    expect(extractVueloFromImage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        images: [
+          { imageBytes: expect.any(Uint8Array), mediaType: "image/png" },
+        ],
+      }),
+    );
+  });
+
+  test("passes multi-image vuelo bundle to extractVueloFromImage", async () => {
+    getSession.mockResolvedValue({ email: "a@kors.com", sub: "uid-1" });
+    parseExtractRequest.mockResolvedValue({
+      tipo: "vuelo",
+      images: [
+        { bytes: new Uint8Array([1]), mediaType: "image/png" },
+        { bytes: new Uint8Array([2]), mediaType: "image/jpeg" },
+      ],
+    });
+    extractVueloFromImage.mockResolvedValue({
+      tipo: "vuelo",
+      fields: {
+        aerolinea: "AR",
+        vueloIdaFecha: "2026-08-10",
+        vueloIdaHoraSalida: "",
+        vueloIdaHoraLlegada: "",
+        vueloIdaNumero: "AR3150",
+        vueloIdaAeropuertoSalida: "EZE",
+        vueloIdaAeropuertoLlegada: "IGR",
+        vueloVueltaFecha: "2026-08-15",
+        vueloVueltaHoraSalida: "",
+        vueloVueltaHoraLlegada: "",
+        vueloVueltaNumero: "AR3151",
+        vueloVueltaAeropuertoSalida: "IGR",
+        vueloVueltaAeropuertoLlegada: "EZE",
+      },
+      warnings: [],
+    });
+
+    const response = await POST(bareRequest());
+
+    expect(response.status).toBe(200);
+    expect(extractVueloFromImage).toHaveBeenCalledTimes(1);
+    const arg = extractVueloFromImage.mock.calls[0]?.[0] as {
+      images: unknown[];
+    };
+    expect(arg.images).toHaveLength(2);
   });
 
   test("returns 422 when image is unreadable", async () => {
     getSession.mockResolvedValue({ email: "a@kors.com", sub: "uid-1" });
     parseExtractRequest.mockResolvedValue({
       tipo: "vuelo",
-      imageBytes: new Uint8Array([1]),
-      mediaType: "image/png",
+      images: [{ bytes: new Uint8Array([1]), mediaType: "image/png" }],
     });
     extractVueloFromImage.mockRejectedValue(new UnreadableImageError());
 
@@ -128,8 +234,7 @@ describe("POST /api/extract-quote-image", () => {
     getSession.mockResolvedValue({ email: "a@kors.com", sub: "uid-1" });
     parseExtractRequest.mockResolvedValue({
       tipo: "hotel",
-      imageBytes: new Uint8Array([1]),
-      mediaType: "image/png",
+      images: [{ bytes: new Uint8Array([1]), mediaType: "image/png" }],
       paxAdultos: 1,
     });
     extractHotelFromImage.mockRejectedValue(new TypeMismatchError());
@@ -142,8 +247,7 @@ describe("POST /api/extract-quote-image", () => {
     getSession.mockResolvedValue({ email: "a@kors.com", sub: "uid-1" });
     parseExtractRequest.mockResolvedValue({
       tipo: "hotel",
-      imageBytes: new Uint8Array([1]),
-      mediaType: "image/png",
+      images: [{ bytes: new Uint8Array([1]), mediaType: "image/png" }],
       paxAdultos: 1,
     });
     extractHotelFromImage.mockRejectedValue(new NothingUsableError());

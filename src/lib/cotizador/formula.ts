@@ -1,6 +1,7 @@
 import Decimal from "decimal.js";
 import {
   FORMULA_PARAMS,
+  type FormulaParams,
   feeMultiplier,
   type PaymentMethod,
 } from "@/lib/cotizador/params";
@@ -28,8 +29,12 @@ export type DestinoCostInput = {
   vueloIdaMenorArs: number;
   vueloVueltaAdultoArs: number;
   vueloVueltaMenorArs: number;
-  hotelAdultoArs: number;
-  hotelMenorArs: number;
+  /** Stay nights (int, no FX). Cost = nights × per-night rate. nights 0 → 0 cost. */
+  hotelNoches: number;
+  /** Per-adult price per night in ARS-equivalent. */
+  hotelAdultoNocheArs: number;
+  /** Per-minor price per night in ARS-equivalent. */
+  hotelMenorNocheArs: number;
   /** Ajuste operador ARS (±). Default: se aplica solo al adulto (Gap 5). */
   hotelAjusteArs?: number;
   hotelNombre?: string;
@@ -131,20 +136,29 @@ function calcularNetoExcursion(
 }
 
 function hotelAdultoConAjuste(
-  hotelAdultoArs: number,
+  stayAdultoArs: Decimal,
   hotelAjusteArs: number,
+  params: FormulaParams,
 ): Decimal {
-  if (FORMULA_PARAMS.hotelAdjustmentAppliesTo === "adulto") {
-    return new Decimal(hotelAdultoArs).plus(hotelAjusteArs);
+  if (params.hotelAdjustmentAppliesTo === "adulto") {
+    return stayAdultoArs.plus(hotelAjusteArs);
   }
-  return new Decimal(hotelAdultoArs);
+  return stayAdultoArs;
 }
 
 /**
- * Fórmula cotizador v2.9 (con fix de menores en excursiones).
- * Internos: HALF_UP 2 dec. Cliente-facing: CEILING a entero.
+ * Cotizador formula **v2.8** (30% agency, × payment fees, 5% seller, CEILING).
+ *
+ * Minors excursion policy (`PoliticaMenores` + `precioMenor`) is the documented
+ * **v2.9 patch** on top of v2.8 — product UI still labels the base as v2.8.
+ *
+ * Internals: HALF_UP 2 dp. Client-facing: CEILING to integer.
+ * Optional `params` override (tests / future API); defaults to `FORMULA_PARAMS`.
  */
-export function calcularCotizacion(input: CotizacionInput): FormulaResult {
+export function calcularCotizacion(
+  input: CotizacionInput,
+  params: FormulaParams = FORMULA_PARAMS,
+): FormulaResult {
   const { paxAdultos, paxMenores, metodoPago, destinos } = input;
 
   if (paxAdultos < 1) {
@@ -157,23 +171,27 @@ export function calcularCotizacion(input: CotizacionInput): FormulaResult {
     throw new FormulaError("Debe haber al menos 1 destino");
   }
 
-  const tc = new Decimal(input.tcArsUsd ?? FORMULA_PARAMS.tcArsUsd);
-  const flightDivisor = new Decimal(1).minus(FORMULA_PARAMS.flightTaxPct);
-  const hotelDivisor = new Decimal(1).minus(FORMULA_PARAMS.hotelTaxPct);
-  const agencyDivisor = new Decimal(1).minus(FORMULA_PARAMS.agencyMarginPct);
-  const sellerDivisor = new Decimal(1).minus(FORMULA_PARAMS.sellerMarginPct);
+  const tc = new Decimal(input.tcArsUsd ?? params.tcArsUsd);
+  const flightDivisor = new Decimal(1).minus(params.flightTaxPct);
+  const hotelDivisor = new Decimal(1).minus(params.hotelTaxPct);
+  const agencyDivisor = new Decimal(1).minus(params.agencyMarginPct);
+  const sellerDivisor = new Decimal(1).minus(params.sellerMarginPct);
 
   let subtotalAdultos = new Decimal(0);
   let subtotalMenores = new Decimal(0);
   const destinoBreakdowns: DestinoBreakdown[] = [];
 
   for (const dest of destinos) {
+    const noches = new Decimal(dest.hotelNoches);
+    const stayAdulto = noches.times(dest.hotelAdultoNocheArs);
+    const stayMenor = noches.times(dest.hotelMenorNocheArs);
     const hotelAjuste = dest.hotelAjusteArs ?? 0;
     const hotelAdultoArsNet = hotelAdultoConAjuste(
-      dest.hotelAdultoArs,
+      stayAdulto,
       hotelAjuste,
+      params,
     );
-    const hotelMenorArsNet = new Decimal(dest.hotelMenorArs);
+    const hotelMenorArsNet = stayMenor;
 
     const vueloIdaAdultoAdj = toUsd(dest.vueloIdaAdultoArs, "ARS", tc).div(
       flightDivisor,
@@ -238,7 +256,9 @@ export function calcularCotizacion(input: CotizacionInput): FormulaResult {
   const precioPaquete = halfUp2(subtotalUsd.div(agencyDivisor));
   const margenAgenciaUsd = halfUp2(precioPaquete.minus(subtotalUsd));
 
-  const precioPostFee = halfUp2(precioPaquete.times(feeMultiplier(metodoPago)));
+  const precioPostFee = halfUp2(
+    precioPaquete.times(feeMultiplier(metodoPago, params)),
+  );
 
   const precioFinal = halfUp2(precioPostFee.div(sellerDivisor));
   const margenVendedorUsd = halfUp2(precioFinal.minus(precioPostFee));

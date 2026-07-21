@@ -60,7 +60,20 @@ export type ApplyVueloPrefillResult = {
    * prices manually under Vuelo on Cliente + Viaje.
    */
   skippedPricesWarning: string | null;
+  /**
+   * Spanish labels for fields skipped because the seller already filled them
+   * (non-empty trip strings or positive prices). Empty when nothing was skipped.
+   */
+  skippedFilledLabels: string[];
 };
+
+function isNonEmptyString(value: unknown): boolean {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function isPositiveNumber(value: unknown): boolean {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
 
 function setStringField(
   setValue: UseFormSetValue<CotizacionFormInput>,
@@ -76,6 +89,10 @@ function setStringField(
 /**
  * Applies flight extract fields to the cotización form.
  * Does not touch client fields (nombre, WhatsApp, perfil, etc.).
+ *
+ * Prefill never overwrites non-empty trip strings or positive flight prices;
+ * empty/zero fields may be filled. Moneda is not overwritten when destinos.0
+ * already has any flight price > 0 (seller has currency context).
  */
 export function applyVueloPrefill(
   fields: VueloExtractFields,
@@ -83,25 +100,44 @@ export function applyVueloPrefill(
   getValues: UseFormGetValues<CotizacionFormInput>,
 ): ApplyVueloPrefillResult {
   const filledPaths: string[] = [];
+  const skippedFilledLabels: string[] = [];
+
+  function skipLabel(path: string): void {
+    const label = VUELO_PREFILL_LABELS[path] ?? path;
+    if (!skippedFilledLabels.includes(label)) {
+      skippedFilledLabels.push(label);
+    }
+  }
 
   for (const key of TRIP_STRING_KEYS) {
     const value = fields[key];
-    if (typeof value === "string" && value.length > 0) {
-      setStringField(setValue, key, value, filledPaths);
+    if (typeof value !== "string" || value.length === 0) continue;
+    if (isNonEmptyString(getValues(key))) {
+      skipLabel(key);
+      continue;
     }
+    setStringField(setValue, key, value, filledPaths);
   }
 
   // Trip-level travel dates from segment dates when present
   if (fields.vueloIdaFecha) {
-    setStringField(setValue, "fechaIda", fields.vueloIdaFecha, filledPaths);
+    if (isNonEmptyString(getValues("fechaIda"))) {
+      skipLabel("fechaIda");
+    } else {
+      setStringField(setValue, "fechaIda", fields.vueloIdaFecha, filledPaths);
+    }
   }
   if (fields.vueloVueltaFecha) {
-    setStringField(
-      setValue,
-      "fechaVuelta",
-      fields.vueloVueltaFecha,
-      filledPaths,
-    );
+    if (isNonEmptyString(getValues("fechaVuelta"))) {
+      skipLabel("fechaVuelta");
+    } else {
+      setStringField(
+        setValue,
+        "fechaVuelta",
+        fields.vueloVueltaFecha,
+        filledPaths,
+      );
+    }
   }
 
   const hasPrice =
@@ -120,20 +156,38 @@ export function applyVueloPrefill(
   }
 
   if (hasPrice && hasDestino) {
+    let anyExistingPrice = false;
     for (const key of PRICE_KEYS) {
-      const value = fields[key];
-      if (typeof value === "number" && Number.isFinite(value)) {
-        const path = `destinos.0.${key}` as const;
-        setValue(path, value, { shouldDirty: true, shouldValidate: false });
-        filledPaths.push(path);
+      const current = getValues(`destinos.0.${key}` as const);
+      if (isPositiveNumber(current)) {
+        anyExistingPrice = true;
       }
     }
+
+    for (const key of PRICE_KEYS) {
+      const value = fields[key];
+      if (typeof value !== "number" || !Number.isFinite(value)) continue;
+      const path = `destinos.0.${key}` as const;
+      const current = getValues(path);
+      if (isPositiveNumber(current)) {
+        skipLabel(path);
+        continue;
+      }
+      setValue(path, value, { shouldDirty: true, shouldValidate: false });
+      filledPaths.push(path);
+    }
+
+    // Skip moneda when seller already has flight price context on destinos.0.
     if (fields.moneda) {
-      setValue("destinos.0.moneda", fields.moneda, {
-        shouldDirty: true,
-        shouldValidate: false,
-      });
-      filledPaths.push("destinos.0.moneda");
+      if (anyExistingPrice) {
+        skipLabel("destinos.0.moneda");
+      } else {
+        setValue("destinos.0.moneda", fields.moneda, {
+          shouldDirty: true,
+          shouldValidate: false,
+        });
+        filledPaths.push("destinos.0.moneda");
+      }
     }
   }
 
@@ -141,5 +195,10 @@ export function applyVueloPrefill(
     (path) => VUELO_PREFILL_LABELS[path] ?? path,
   );
 
-  return { filledPaths, filledLabels, skippedPricesWarning };
+  return {
+    filledPaths,
+    filledLabels,
+    skippedPricesWarning,
+    skippedFilledLabels,
+  };
 }

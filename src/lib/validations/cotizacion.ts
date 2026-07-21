@@ -54,8 +54,12 @@ const destinoFormSchema = z.object({
   vueloIdaMenorArs: z.coerce.number().min(0),
   vueloVueltaAdultoArs: z.coerce.number().min(0),
   vueloVueltaMenorArs: z.coerce.number().min(0),
-  hotelAdultoArs: z.coerce.number().min(0),
-  hotelMenorArs: z.coerce.number().min(0),
+  /** Stay nights for this destino. 0 → hotel cost is 0 even if night rates > 0. */
+  hotelNoches: z.coerce.number().int().min(0),
+  /** Per-adult price per night (form currency). */
+  hotelAdultoNocheArs: z.coerce.number().min(0),
+  /** Per-minor price per night (form currency). Optional / min 0. */
+  hotelMenorNocheArs: z.coerce.number().min(0),
   hotelNombre: z.string(),
   hotelCategoria: z.union([z.enum(HOTEL_CATEGORIAS), z.literal("")]),
   hotelRegimen: z.string(),
@@ -157,8 +161,9 @@ export function emptyDestino(destino: DestinoOption): DestinoFormInput {
     vueloIdaMenorArs: 0,
     vueloVueltaAdultoArs: 0,
     vueloVueltaMenorArs: 0,
-    hotelAdultoArs: 0,
-    hotelMenorArs: 0,
+    hotelNoches: 0,
+    hotelAdultoNocheArs: 0,
+    hotelMenorNocheArs: 0,
     hotelNombre: "",
     hotelCategoria: "",
     hotelRegimen: "",

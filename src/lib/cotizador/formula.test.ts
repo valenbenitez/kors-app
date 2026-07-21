@@ -1,9 +1,21 @@
 import { describe, expect, it } from "vitest";
 import {
+  KELLY_IGUAZU_V28_INPUT,
+  KELLY_IGUAZU_V28_PRECIO_FINAL_CLIENTE,
+} from "@/lib/cotizador/fixtures/kelly-iguazu-v28";
+import {
   calcularCotizacion,
   type ExcursionInput,
   FormulaError,
 } from "@/lib/cotizador/formula";
+import { FORMULA_PARAMS } from "@/lib/cotizador/params";
+
+/**
+ * Golden suite notes (PRD P0 / spec §5):
+ * - Notion task names COT-0001..0006 refer to historical **v2.7** rows (wrong goldens).
+ * - Spec bit-exact starts at COT-0007+ (v2.8). We ship Kelly (spec COT-0007) + COT-0010
+ *   + minors policy A–D — not invented fake 0001–0006 fixtures.
+ */
 
 const baseExc = (
   overrides: Partial<ExcursionInput> & Pick<ExcursionInput, "neto">,
@@ -29,8 +41,9 @@ describe("calcularCotizacion — políticas de menores (excursiones)", () => {
           vueloIdaMenorArs: 0,
           vueloVueltaAdultoArs: 0,
           vueloVueltaMenorArs: 0,
-          hotelAdultoArs: 0,
-          hotelMenorArs: 0,
+          hotelNoches: 0,
+          hotelAdultoNocheArs: 0,
+          hotelMenorNocheArs: 0,
           excursiones: [baseExc({ neto: 50, politicaMenores: "Mismo adulto" })],
         },
       ],
@@ -51,8 +64,9 @@ describe("calcularCotizacion — políticas de menores (excursiones)", () => {
           vueloIdaMenorArs: 0,
           vueloVueltaAdultoArs: 0,
           vueloVueltaMenorArs: 0,
-          hotelAdultoArs: 0,
-          hotelMenorArs: 0,
+          hotelNoches: 0,
+          hotelAdultoNocheArs: 0,
+          hotelMenorNocheArs: 0,
           excursiones: [
             baseExc({
               neto: 100,
@@ -79,8 +93,9 @@ describe("calcularCotizacion — políticas de menores (excursiones)", () => {
           vueloIdaMenorArs: 0,
           vueloVueltaAdultoArs: 0,
           vueloVueltaMenorArs: 0,
-          hotelAdultoArs: 0,
-          hotelMenorArs: 0,
+          hotelNoches: 0,
+          hotelAdultoNocheArs: 0,
+          hotelMenorNocheArs: 0,
           excursiones: [baseExc({ neto: 80, politicaMenores: "No aplica" })],
         },
       ],
@@ -102,8 +117,9 @@ describe("calcularCotizacion — políticas de menores (excursiones)", () => {
             vueloIdaMenorArs: 0,
             vueloVueltaAdultoArs: 0,
             vueloVueltaMenorArs: 0,
-            hotelAdultoArs: 0,
-            hotelMenorArs: 0,
+            hotelNoches: 0,
+            hotelAdultoNocheArs: 0,
+            hotelMenorNocheArs: 0,
             excursiones: [baseExc({ neto: 50, politicaMenores: "Consultar" })],
           },
         ],
@@ -123,8 +139,9 @@ describe("calcularCotizacion — políticas de menores (excursiones)", () => {
           vueloIdaMenorArs: 0,
           vueloVueltaAdultoArs: 0,
           vueloVueltaMenorArs: 0,
-          hotelAdultoArs: 0,
-          hotelMenorArs: 0,
+          hotelNoches: 0,
+          hotelAdultoNocheArs: 0,
+          hotelMenorNocheArs: 0,
           excursiones: [
             baseExc({
               neto: 100,
@@ -153,8 +170,9 @@ describe("calcularCotizacion — políticas de menores (excursiones)", () => {
             vueloIdaMenorArs: 0,
             vueloVueltaAdultoArs: 0,
             vueloVueltaMenorArs: 0,
-            hotelAdultoArs: 0,
-            hotelMenorArs: 0,
+            hotelNoches: 0,
+            hotelAdultoNocheArs: 0,
+            hotelMenorNocheArs: 0,
             excursiones: [
               baseExc({
                 neto: 100,
@@ -166,6 +184,38 @@ describe("calcularCotizacion — políticas de menores (excursiones)", () => {
         ],
       }),
     ).toThrow(FormulaError);
+  });
+});
+
+describe("calcularCotizacion — Kelly / Iguazú v2.8 golden (spec COT-0007)", () => {
+  it("kelly-iguazu-v28 → precioFinalCliente USD 1289", () => {
+    const result = calcularCotizacion(KELLY_IGUAZU_V28_INPUT);
+
+    expect(result.subtotalUsd).toBe(779.01);
+    expect(result.precioPaquete).toBe(1112.87);
+    expect(result.margenAgenciaUsd).toBe(333.86);
+    // Spec table shows 1224.15 / 1288.58; HALF_UP path is 1224.16 / 1288.59.
+    expect(result.precioPostFee).toBe(1224.16);
+    expect(result.precioFinal).toBe(1288.59);
+    expect(result.precioFinalCliente).toBe(
+      KELLY_IGUAZU_V28_PRECIO_FINAL_CLIENTE,
+    );
+    expect(result.precioAdultoCliente).toBe(1289);
+  });
+
+  it("accepts params override (agency margin) without mutating defaults", () => {
+    const withCash = calcularCotizacion(
+      { ...KELLY_IGUAZU_V28_INPUT, metodoPago: "efectivo" },
+      { ...FORMULA_PARAMS, agencyMarginPct: 0.35 },
+    );
+    // Higher agency margin → higher final than default v2.8 path for efectivo.
+    const baseline = calcularCotizacion({
+      ...KELLY_IGUAZU_V28_INPUT,
+      metodoPago: "efectivo",
+    });
+    expect(withCash.precioFinalCliente).toBeGreaterThan(
+      baseline.precioFinalCliente,
+    );
   });
 });
 
@@ -187,8 +237,9 @@ describe("calcularCotizacion — pasos 4→9 desde costo neto (COT-0010)", () =>
           vueloIdaMenorArs: 0,
           vueloVueltaAdultoArs: 0,
           vueloVueltaMenorArs: 0,
-          hotelAdultoArs: 0,
-          hotelMenorArs: 0,
+          hotelNoches: 0,
+          hotelAdultoNocheArs: 0,
+          hotelMenorNocheArs: 0,
           // 3212.17 / 7 pax ≈ 458.8814 USD por pax con Mismo adulto
           excursiones: [
             baseExc({
@@ -230,8 +281,9 @@ describe("calcularCotizacion — COT-0010 inputs ARS reconstruidos", () => {
           vueloIdaMenorArs: flightArs,
           vueloVueltaAdultoArs: 0,
           vueloVueltaMenorArs: 0,
-          hotelAdultoArs: hotelArs,
-          hotelMenorArs: hotelArs,
+          hotelNoches: 1,
+          hotelAdultoNocheArs: hotelArs,
+          hotelMenorNocheArs: hotelArs,
           excursiones: [
             {
               id: "pqt01a",
@@ -258,5 +310,34 @@ describe("calcularCotizacion — COT-0010 inputs ARS reconstruidos", () => {
     expect(result.precioFinalCliente).toBe(5314);
     expect(result.precioAdultoCliente).toBe(760);
     expect(result.precioMenorCliente).toBe(760);
+  });
+
+  it("5 nights × known rate → expected USD stay path", () => {
+    // stay = 5 × 100_000 = 500_000 ARS → ÷1420 ÷0.97 → USD path
+    const result = calcularCotizacion({
+      paxAdultos: 1,
+      paxMenores: 0,
+      metodoPago: "efectivo",
+      tcArsUsd: 1420,
+      destinos: [
+        {
+          destino: "Iguazú",
+          vueloIdaAdultoArs: 0,
+          vueloIdaMenorArs: 0,
+          vueloVueltaAdultoArs: 0,
+          vueloVueltaMenorArs: 0,
+          hotelNoches: 5,
+          hotelAdultoNocheArs: 100_000,
+          hotelMenorNocheArs: 0,
+          excursiones: [],
+        },
+      ],
+    });
+
+    expect(result.destinos[0]?.hotelAdultoArsNet).toBe(500_000);
+    // 500_000 / 1420 / (1-0.03) → halfUp2 363
+    expect(result.subtotalUsd).toBe(363);
+    // /0.7 agency → 518.57; /0.95 seller → 545.86; CEILING 546
+    expect(result.precioFinalCliente).toBe(546);
   });
 });

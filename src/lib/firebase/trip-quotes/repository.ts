@@ -45,21 +45,33 @@ export function parseTripQuoteDoc(
     );
   }
 
+  const d = parsed.data;
   return {
     id,
-    cotNumber: parsed.data.cotNumber,
-    status: parsed.data.status,
-    createdAt: toDate(parsed.data.createdAt),
-    updatedAt: toDate(parsed.data.updatedAt),
-    createdBy: parsed.data.createdBy,
-    form: parsed.data.form,
-    result: parsed.data.result,
+    cotNumber: d.cotNumber,
+    status: d.status,
+    createdAt: toDate(d.createdAt),
+    updatedAt: toDate(d.updatedAt),
+    createdBy: d.createdBy,
+    form: d.form,
+    result: d.result,
+    pdfClienteUrl: d.pdfClienteUrl,
+    pdfStoragePath: d.pdfStoragePath,
+    driveFileId: d.driveFileId,
+    roundingRule: d.roundingRule,
+    costoNetoUsd: d.costoNetoUsd,
+    margenAgenciaUsd: d.margenAgenciaUsd,
+    margenVendedorUsd: d.margenVendedorUsd,
+    precioFinalCliente: d.precioFinalCliente,
+    perfil: d.perfil,
+    premiumTag: d.premiumTag,
+    clienteNombre: d.clienteNombre,
   };
 }
 
 /**
  * Persists a new trip quote. Returns the Firestore document id.
- * TODO: atomic COT-XXXX counter when product requires sequential numbers.
+ * Cot numbers are allocated separately via `allocateCotNumber`.
  */
 export async function createTripQuote(
   input: CreateTripQuoteInput,
@@ -76,11 +88,46 @@ export async function createTripQuote(
       createdBy: input.createdBy,
       form: input.form,
       result: input.result,
+      pdfClienteUrl: input.pdfClienteUrl ?? null,
+      pdfStoragePath: input.pdfStoragePath ?? null,
+      driveFileId: input.driveFileId ?? null,
+      roundingRule: input.roundingRule ?? "CEILING_v1",
+      costoNetoUsd: input.costoNetoUsd ?? input.result.subtotalUsd,
+      margenAgenciaUsd: input.margenAgenciaUsd ?? input.result.margenAgenciaUsd,
+      margenVendedorUsd:
+        input.margenVendedorUsd ?? input.result.margenVendedorUsd,
+      precioFinalCliente:
+        input.precioFinalCliente ?? input.result.precioFinalCliente,
+      perfil: input.perfil ?? input.form.perfil,
+      premiumTag: input.premiumTag ?? false,
+      clienteNombre: input.clienteNombre ?? input.form.clienteNombre,
     });
 
     return ref.id;
   } catch (error) {
     mapFirebaseError(error, "createTripQuote");
+  }
+}
+
+/** Patches Drive PDF fields after a successful upload. */
+export async function updateTripQuoteDriveFields(
+  id: string,
+  fields: {
+    pdfClienteUrl: string | null;
+    pdfStoragePath: string | null;
+    driveFileId: string | null;
+  },
+): Promise<void> {
+  try {
+    const ref = getAdminFirestore().collection(TRIP_QUOTES).doc(id);
+    await ref.update({
+      pdfClienteUrl: fields.pdfClienteUrl,
+      pdfStoragePath: fields.pdfStoragePath,
+      driveFileId: fields.driveFileId,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  } catch (error) {
+    mapFirebaseError(error, "updateTripQuoteDriveFields");
   }
 }
 

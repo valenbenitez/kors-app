@@ -68,6 +68,18 @@ function mapInvalidRequest(message: string): string {
   if (message.includes("paxAdultos must")) {
     return "paxAdultos debe ser un entero mayor o igual a 1";
   }
+  if (message.includes("vuelo extract allows at most")) {
+    return "Demasiadas imágenes de vuelo en un solo envío.";
+  }
+  if (message.includes("hotel extract allows at most")) {
+    return "Demasiadas imágenes de hotel en un solo envío.";
+  }
+  if (message.includes("vuelo extract requires at least")) {
+    return "Subí al menos una imagen de vuelo.";
+  }
+  if (message.includes("hotel extract requires at least")) {
+    return "Subí al menos una imagen de hotel.";
+  }
   if (message.includes("image") || message.includes("mediaType")) {
     return "Imagen inválida. Usá JPEG, PNG o WebP.";
   }
@@ -82,7 +94,7 @@ function mapInvalidRequest(message: string): string {
 
 /**
  * Authenticated vision extract for hotel / flight screenshots.
- * Prefill only — does not persist to Firestore.
+ * Prefill only ? does not persist to Firestore.
  */
 export async function POST(request: Request) {
   const session = await getSession();
@@ -96,14 +108,18 @@ export async function POST(request: Request) {
     const result =
       parsed.tipo === "hotel"
         ? await extractHotelFromImage({
-            imageBytes: parsed.imageBytes,
-            mediaType: parsed.mediaType,
+            images: parsed.images.map((img) => ({
+              imageBytes: img.bytes,
+              mediaType: img.mediaType,
+            })),
             paxAdultos: parsed.paxAdultos ?? 1,
             moneda: parsed.moneda,
           })
         : await extractVueloFromImage({
-            imageBytes: parsed.imageBytes,
-            mediaType: parsed.mediaType,
+            images: parsed.images.map((img) => ({
+              imageBytes: img.bytes,
+              mediaType: img.mediaType,
+            })),
             moneda: parsed.moneda,
           });
 

@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
-import { formToFormulaInput } from "@/lib/cotizador/build-input";
-import { calcularCotizacion, FormulaError } from "@/lib/cotizador/formula";
-import { resolveRates } from "@/lib/cotizador/rates";
+import { buildQuotePdf } from "@/lib/cotizador/build-quote-pdf";
+import { FormulaError } from "@/lib/cotizador/formula";
+import { computePremiumTag } from "@/lib/cotizador/premium";
+import { allocateCotNumber } from "@/lib/firebase/counters/cotizaciones";
 import { createTripQuote } from "@/lib/firebase/trip-quotes/repository";
-import { clientPdfFilename, generateCotNumber } from "@/lib/pdf/cot-number";
-import { htmlToPdf } from "@/lib/pdf/generate";
-import { renderPdfHtml } from "@/lib/pdf/template";
+import { ROUNDING_RULE_CEILING_V1 } from "@/lib/firebase/trip-quotes/types";
+import { clientPdfFilename } from "@/lib/pdf/cot-number";
 import { cotizacionFormSchema } from "@/lib/validations/cotizacion";
 
 export const runtime = "nodejs";
@@ -46,31 +46,29 @@ export async function POST(request: Request) {
   }
 
   try {
-    // Prefer live sheet rates; fall back to FX_RATES_TO_USD if RATES_URL is
-    // missing or the sheet is unreachable (same policy as the wizard).
-    const { rates } = await resolveRates();
-    const formulaInput = formToFormulaInput(parsed.data, rates);
-    const result = calcularCotizacion(formulaInput);
-    const generatedAt = new Date().toISOString().slice(0, 10);
-    const cotNumber = generateCotNumber();
+    const cotNumber = await allocateCotNumber();
+    const built = await buildQuotePdf(parsed.data, cotNumber);
     const filename = clientPdfFilename(cotNumber);
-
-    const html = renderPdfHtml({
-      cotNumber,
-      form: parsed.data,
-      result,
-      generatedAt,
-    });
-
-    const pdf = await htmlToPdf(html);
+    const premiumTag = computePremiumTag(parsed.data, built.result);
 
     try {
       await createTripQuote({
         cotNumber,
         status: "generated",
         form: parsed.data,
-        result,
+        result: built.result,
         createdBy: { uid: session.sub, email: session.email },
+        roundingRule: ROUNDING_RULE_CEILING_V1,
+        costoNetoUsd: built.result.subtotalUsd,
+        margenAgenciaUsd: built.result.margenAgenciaUsd,
+        margenVendedorUsd: built.result.margenVendedorUsd,
+        precioFinalCliente: built.result.precioFinalCliente,
+        perfil: parsed.data.perfil,
+        premiumTag,
+        clienteNombre: parsed.data.clienteNombre,
+        pdfClienteUrl: null,
+        pdfStoragePath: null,
+        driveFileId: null,
       });
     } catch (persistError) {
       console.error("generate-pdf persist error", persistError);
@@ -82,12 +80,12 @@ export async function POST(request: Request) {
       );
     }
 
-    return new NextResponse(new Uint8Array(pdf), {
+    return new NextResponse(new Uint8Array(built.pdf), {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
         "Content-Disposition": `attachment; filename="${filename}"`,
-        "X-Cotizacion-Precio-Final": String(result.precioFinalCliente),
+        "X-Cotizacion-Precio-Final": String(built.result.precioFinalCliente),
         "X-Cotizacion-Numero": cotNumber,
       },
     });

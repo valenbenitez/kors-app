@@ -39,10 +39,16 @@ export function formatDateShort(iso: string): string {
   }).format(d);
 }
 
-export function nightsLabel(ida: string, vuelta: string): string {
+/** Whole nights between trip dates (vuelta − ida). Negative/invalid → 0. */
+export function countNights(ida: string, vuelta: string): number {
   const a = new Date(`${ida}T12:00:00`);
   const b = new Date(`${vuelta}T12:00:00`);
-  const n = Math.max(Math.round((b.getTime() - a.getTime()) / 86_400_000), 0);
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return 0;
+  return Math.max(Math.round((b.getTime() - a.getTime()) / 86_400_000), 0);
+}
+
+export function nightsLabel(ida: string, vuelta: string): string {
+  const n = countNights(ida, vuelta);
   return `${n} ${n === 1 ? "noche" : "noches"}`;
 }
 

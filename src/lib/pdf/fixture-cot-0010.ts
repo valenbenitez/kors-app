@@ -84,8 +84,10 @@ export function buildCot0010Form(): CotizacionFormInput {
         ...emptyDestino("Misiones"),
         vueloIdaAdultoArs: flightArs,
         vueloIdaMenorArs: flightArs,
-        hotelAdultoArs: hotelArs,
-        hotelMenorArs: hotelArs,
+        // nights=1 × stay-total rate preserves COT-0010 USD golden exactly
+        hotelNoches: 1,
+        hotelAdultoNocheArs: hotelArs,
+        hotelMenorNocheArs: hotelArs,
         hotelNombre: "Yvy Hotel de Selva",
         hotelCategoria: "4★",
         hotelRegimen: "desayuno incluido",

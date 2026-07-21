@@ -1,64 +1,46 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 const getSession = vi.fn();
-const formToFormulaInput = vi.fn();
-const calcularCotizacion = vi.fn();
-const generateCotNumber = vi.fn();
-const clientPdfFilename = vi.fn();
-const renderPdfHtml = vi.fn();
-const htmlToPdf = vi.fn();
+const buildQuotePdf = vi.fn();
+const allocateCotNumber = vi.fn();
 const createTripQuote = vi.fn();
+const computePremiumTag = vi.fn();
 const safeParse = vi.fn();
 
 vi.mock("@/lib/auth/session", () => ({
   getSession: (...args: unknown[]) => getSession(...args),
 }));
 
-vi.mock("@/lib/cotizador/build-input", () => ({
-  formToFormulaInput: (...args: unknown[]) => formToFormulaInput(...args),
+vi.mock("@/lib/cotizador/build-quote-pdf", () => ({
+  buildQuotePdf: (...args: unknown[]) => buildQuotePdf(...args),
 }));
 
-vi.mock("@/lib/cotizador/rates", () => ({
-  resolveRates: vi.fn(async () => ({
-    rates: {
-      USD: 1,
-      ARS: 1420,
-      CLP: 950,
-      COP: 4100,
-      PIX: 5.5,
-      PEN: 3.75,
-    },
-    source: "fallback" as const,
-  })),
-}));
-
-vi.mock("@/lib/cotizador/formula", () => ({
-  calcularCotizacion: (...args: unknown[]) => calcularCotizacion(...args),
-  FormulaError: class FormulaError extends Error {},
-}));
-
-vi.mock("@/lib/pdf/cot-number", () => ({
-  generateCotNumber: (...args: unknown[]) => generateCotNumber(...args),
-  clientPdfFilename: (...args: unknown[]) => clientPdfFilename(...args),
-}));
-
-vi.mock("@/lib/pdf/template", () => ({
-  renderPdfHtml: (...args: unknown[]) => renderPdfHtml(...args),
-}));
-
-vi.mock("@/lib/pdf/generate", () => ({
-  htmlToPdf: (...args: unknown[]) => htmlToPdf(...args),
+vi.mock("@/lib/firebase/counters/cotizaciones", () => ({
+  allocateCotNumber: (...args: unknown[]) => allocateCotNumber(...args),
 }));
 
 vi.mock("@/lib/firebase/trip-quotes/repository", () => ({
   createTripQuote: (...args: unknown[]) => createTripQuote(...args),
 }));
 
-vi.mock("@/lib/validations/cotizacion", () => ({
-  cotizacionFormSchema: {
-    safeParse: (...args: unknown[]) => safeParse(...args),
-  },
+vi.mock("@/lib/cotizador/premium", () => ({
+  computePremiumTag: (...args: unknown[]) => computePremiumTag(...args),
 }));
+
+vi.mock("@/lib/cotizador/formula", () => ({
+  FormulaError: class FormulaError extends Error {},
+}));
+
+vi.mock("@/lib/validations/cotizacion", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/lib/validations/cotizacion")>();
+  return {
+    ...actual,
+    cotizacionFormSchema: {
+      safeParse: (...args: unknown[]) => safeParse(...args),
+    },
+  };
+});
 
 import { POST } from "@/app/api/generate-pdf/route";
 import { FormulaError } from "@/lib/cotizador/formula";
@@ -71,18 +53,27 @@ function jsonRequest(body: unknown = {}): Request {
   });
 }
 
-const formBody = { clienteNombre: "Ana" };
-const formulaResult = { precioFinalCliente: 100 };
+const formBody = { clienteNombre: "Ana", perfil: "Pareja" };
+const formulaResult = {
+  precioFinalCliente: 100,
+  subtotalUsd: 70,
+  margenAgenciaUsd: 20,
+  margenVendedorUsd: 5,
+};
 
 function mockHappyPath() {
   getSession.mockResolvedValue({ email: "a@kors.com", sub: "uid-1" });
   safeParse.mockReturnValue({ success: true as const, data: formBody });
-  formToFormulaInput.mockReturnValue({});
-  calcularCotizacion.mockReturnValue(formulaResult);
-  generateCotNumber.mockReturnValue("COT-0001");
-  clientPdfFilename.mockReturnValue("COT-0001.pdf");
-  renderPdfHtml.mockReturnValue("<html></html>");
-  htmlToPdf.mockResolvedValue(Buffer.from("%PDF"));
+  allocateCotNumber.mockResolvedValue("COT-0001");
+  buildQuotePdf.mockResolvedValue({
+    cotNumber: "COT-0001",
+    filename: "COT-0001_cliente.pdf",
+    pdf: Buffer.from("%PDF"),
+    form: formBody,
+    result: formulaResult,
+    generatedAt: "2026-07-21",
+  });
+  computePremiumTag.mockReturnValue(false);
   createTripQuote.mockResolvedValue("doc-id-1");
 }
 
@@ -99,7 +90,7 @@ describe("POST /api/generate-pdf", () => {
 
     expect(response.status).toBe(401);
     expect(data.error).toBe("No autorizado");
-    expect(htmlToPdf).not.toHaveBeenCalled();
+    expect(buildQuotePdf).not.toHaveBeenCalled();
     expect(createTripQuote).not.toHaveBeenCalled();
   });
 
@@ -117,24 +108,21 @@ describe("POST /api/generate-pdf", () => {
 
     expect(response.status).toBe(400);
     expect(data.error).toBe("Cliente requerido");
-    expect(htmlToPdf).not.toHaveBeenCalled();
+    expect(buildQuotePdf).not.toHaveBeenCalled();
     expect(createTripQuote).not.toHaveBeenCalled();
   });
 
   test("returns 422 when formula fails and does not persist", async () => {
     getSession.mockResolvedValue({ email: "a@kors.com", sub: "uid-1" });
     safeParse.mockReturnValue({ success: true as const, data: formBody });
-    formToFormulaInput.mockReturnValue({});
-    calcularCotizacion.mockImplementation(() => {
-      throw new FormulaError("TC inválido");
-    });
+    allocateCotNumber.mockResolvedValue("COT-0001");
+    buildQuotePdf.mockRejectedValue(new FormulaError("TC inválido"));
 
     const response = await POST(jsonRequest(formBody));
     const data = await response.json();
 
     expect(response.status).toBe(422);
     expect(data.error).toBe("TC inválido");
-    expect(htmlToPdf).not.toHaveBeenCalled();
     expect(createTripQuote).not.toHaveBeenCalled();
   });
 
@@ -145,14 +133,18 @@ describe("POST /api/generate-pdf", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("Content-Type")).toBe("application/pdf");
-    expect(htmlToPdf).toHaveBeenCalledOnce();
-    expect(createTripQuote).toHaveBeenCalledExactlyOnceWith({
-      cotNumber: "COT-0001",
-      status: "generated",
-      form: formBody,
-      result: formulaResult,
-      createdBy: { uid: "uid-1", email: "a@kors.com" },
-    });
+    expect(allocateCotNumber).toHaveBeenCalledOnce();
+    expect(buildQuotePdf).toHaveBeenCalledExactlyOnceWith(formBody, "COT-0001");
+    expect(createTripQuote).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        cotNumber: "COT-0001",
+        status: "generated",
+        form: formBody,
+        result: formulaResult,
+        createdBy: { uid: "uid-1", email: "a@kors.com" },
+        roundingRule: "CEILING_v1",
+      }),
+    );
   });
 
   test("fails the request with Spanish error when persist fails after PDF", async () => {
@@ -162,7 +154,7 @@ describe("POST /api/generate-pdf", () => {
     const response = await POST(jsonRequest(formBody));
     const data = await response.json();
 
-    expect(htmlToPdf).toHaveBeenCalledOnce();
+    expect(buildQuotePdf).toHaveBeenCalledOnce();
     expect(createTripQuote).toHaveBeenCalledOnce();
     expect(response.status).toBe(500);
     expect(data.error).toBe(

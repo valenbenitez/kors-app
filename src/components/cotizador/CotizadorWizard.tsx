@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formToFormulaInput } from "@/lib/cotizador/build-input";
 import type { CatalogExcursion } from "@/lib/cotizador/catalog";
+import { countNights } from "@/lib/cotizador/format";
 import {
   calcularCotizacion,
   FormulaError,
@@ -32,7 +33,7 @@ import {
   convertCatalogAmountToForm,
   type FxRatesMap,
   fallbackFxRates,
-  isFxRatesMap,
+  pickFxRatesMap,
 } from "@/lib/cotizador/rates";
 import { cn } from "@/lib/utils";
 import {
@@ -78,8 +79,8 @@ const DESTINO_MONEY_FIELDS = [
   "vueloIdaMenorArs",
   "vueloVueltaAdultoArs",
   "vueloVueltaMenorArs",
-  "hotelAdultoArs",
-  "hotelMenorArs",
+  "hotelAdultoNocheArs",
+  "hotelMenorNocheArs",
   "hotelAjusteArs",
 ] as const;
 
@@ -108,8 +109,13 @@ export function CotizadorWizard() {
   const [step, setStep] = useState(0);
   const [serverError, setServerError] = useState<string | null>(null);
   const [downloadSuccess, setDownloadSuccess] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState<{
+    cotNumber: string;
+    pdfDriveUrl: string | null;
+  } | null>(null);
   const [preview, setPreview] = useState<FormulaResult | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [showPdfPreview, setShowPdfPreview] = useState(false);
   // Live rates when /api/rates succeeds; FX_RATES_TO_USD fallback keeps demos
   // working if the sheet is down (show muted "TC (fallback)" warning).
@@ -125,6 +131,7 @@ export function CotizadorWizard() {
   // Guard reentrante: garantiza como máximo una petición activa aunque
   // lleguen submits concurrentes (doble click / doble Enter) antes del rerender.
   const isGeneratingRef = useRef(false);
+  const isSavingRef = useRef(false);
   /** Form paths filled by flight image prefill — used for visual highlight. */
   const [prefilledFlightPaths, setPrefilledFlightPaths] = useState<string[]>(
     [],
@@ -151,11 +158,12 @@ export function CotizadorWizard() {
         const res = await fetch("/api/rates");
         if (!res.ok) throw new Error(`Rates HTTP ${res.status}`);
         const data: unknown = await res.json();
-        if (!isFxRatesMap(data)) {
+        const ratesMap = pickFxRatesMap(data);
+        if (!ratesMap) {
           throw new Error("Invalid rates payload");
         }
         if (!cancelled) {
-          setRates(data);
+          setRates(ratesMap);
           setRatesSource("live");
         }
       } catch {
@@ -222,6 +230,22 @@ export function CotizadorWizard() {
     });
   }, [fechaVuelta, setValue]);
 
+  // Default hotelNoches from trip dates when still 0 (do not overwrite seller input).
+  useEffect(() => {
+    if (!fechaIda || !fechaVuelta) return;
+    const nights = countNights(fechaIda, fechaVuelta);
+    if (nights <= 0) return;
+    const destinos = getValues("destinos");
+    destinos.forEach((d, i) => {
+      if ((d.hotelNoches ?? 0) === 0) {
+        setValue(`destinos.${i}.hotelNoches`, nights, {
+          shouldDirty: false,
+          shouldValidate: false,
+        });
+      }
+    });
+  }, [fechaIda, fechaVuelta, getValues, setValue]);
+
   const excursionsByDestino = useMemo(() => {
     const map: Record<string, CatalogExcursion[]> = {};
     for (const d of destinosSeleccionados) {
@@ -234,10 +258,16 @@ export function CotizadorWizard() {
 
   function syncDestinos(selected: DestinoOption[]) {
     const current = getValues("destinos");
-    const next = selected.map(
-      (destino) =>
-        current.find((d) => d.destino === destino) ?? emptyDestino(destino),
-    );
+    const nights =
+      fechaIda && fechaVuelta ? countNights(fechaIda, fechaVuelta) : 0;
+    const next = selected.map((destino) => {
+      const existing =
+        current.find((d) => d.destino === destino) ?? emptyDestino(destino);
+      if (nights > 0 && (existing.hotelNoches ?? 0) === 0) {
+        return { ...existing, hotelNoches: nights };
+      }
+      return existing;
+    });
     replace(next);
     setValue("destinosSeleccionados", selected, { shouldValidate: true });
   }
@@ -361,6 +391,52 @@ export function CotizadorWizard() {
     }
   }
 
+  async function onSave(values: CotizacionFormInput) {
+    if (isSavingRef.current) return;
+    isSavingRef.current = true;
+    setServerError(null);
+    setSaveSuccess(null);
+    setIsSaving(true);
+    try {
+      const response = await fetch("/api/cotizaciones", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(values),
+      });
+
+      const data = (await response.json().catch(() => null)) as {
+        error?: string;
+        cot_number?: string;
+        pdf_drive_url?: string | null;
+      } | null;
+
+      if (!response.ok) {
+        setServerError(
+          data?.error ??
+            "No se pudo guardar la cotización. Revisá los datos e intentá de nuevo.",
+        );
+        return;
+      }
+
+      if (!data?.cot_number) {
+        setServerError("La cotización se guardó sin número. Intentá de nuevo.");
+        return;
+      }
+
+      setSaveSuccess({
+        cotNumber: data.cot_number,
+        pdfDriveUrl: data.pdf_drive_url ?? null,
+      });
+    } catch {
+      setServerError(
+        "No se pudo conectar al guardar la cotización. Revisá tu conexión e intentá de nuevo.",
+      );
+    } finally {
+      isSavingRef.current = false;
+      setIsSaving(false);
+    }
+  }
+
   // Multi-destino: TC header uses the first destino's moneda.
   const headerMoneda = destinosWatch.find((d) => d?.moneda)?.moneda ?? "ARS";
   // Flight costs bind to destinos[0] only (same as applyVueloPrefill).
@@ -387,8 +463,8 @@ export function CotizadorWizard() {
           {ratesLoading || !rates
             ? "Cargando cotizaciones…"
             : ratesSource === "fallback"
-              ? `TC ${headerMoneda}/USD ${rates[headerMoneda]} (fallback) · fórmula v2.9`
-              : `TC ${headerMoneda}/USD ${rates[headerMoneda]} · fórmula v2.9`}
+              ? `TC ${headerMoneda}/USD ${rates[headerMoneda]} (fallback) · fórmula v2.8`
+              : `TC ${headerMoneda}/USD ${rates[headerMoneda]} · fórmula v2.8`}
         </p>
         {ratesSource === "fallback" ? (
           <p className="mt-1 text-xs text-muted-foreground">
@@ -913,23 +989,35 @@ export function CotizadorWizard() {
 
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-2">
-                      <Label>{cur("Hotel por adulto")}</Label>
+                      <Label htmlFor={`hotelNoches-${index}`}>Noches</Label>
+                      <Input
+                        id={`hotelNoches-${index}`}
+                        type="number"
+                        min={0}
+                        step={1}
+                        {...register(`destinos.${index}.hotelNoches`, {
+                          valueAsNumber: true,
+                        })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>{cur("Hotel adulto / noche")}</Label>
                       <MoneyField
                         currency={moneda}
-                        value={destinosWatch[index]?.hotelAdultoArs ?? 0}
+                        value={destinosWatch[index]?.hotelAdultoNocheArs ?? 0}
                         onValueChange={(v) =>
-                          setValue(`destinos.${index}.hotelAdultoArs`, v)
+                          setValue(`destinos.${index}.hotelAdultoNocheArs`, v)
                         }
                       />
                     </div>
                     {hasMenores ? (
                       <div className="space-y-2">
-                        <Label>{cur("Hotel por menor")}</Label>
+                        <Label>{cur("Hotel menor / noche")}</Label>
                         <MoneyField
                           currency={moneda}
-                          value={destinosWatch[index]?.hotelMenorArs ?? 0}
+                          value={destinosWatch[index]?.hotelMenorNocheArs ?? 0}
                           onValueChange={(v) =>
-                            setValue(`destinos.${index}.hotelMenorArs`, v)
+                            setValue(`destinos.${index}.hotelMenorNocheArs`, v)
                           }
                         />
                       </div>
@@ -1230,13 +1318,33 @@ export function CotizadorWizard() {
           </output>
         ) : null}
 
+        {saveSuccess ? (
+          <output className="mt-4 block rounded-2xl border border-success/25 bg-success/10 px-3 py-2.5 text-sm text-success">
+            Cotización guardada ·{" "}
+            <span className="font-semibold">{saveSuccess.cotNumber}</span>
+            {saveSuccess.pdfDriveUrl ? (
+              <>
+                {" · "}
+                <a
+                  href={saveSuccess.pdfDriveUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline underline-offset-2"
+                >
+                  Ver PDF en Drive
+                </a>
+              </>
+            ) : null}
+          </output>
+        ) : null}
+
         {step === 2 ? (
           <>
             <div className="mt-4">
               <Button
                 type="button"
                 variant="outline"
-                disabled={isGenerating}
+                disabled={isGenerating || isSaving}
                 aria-expanded={showPdfPreview}
                 onClick={() => setShowPdfPreview((open) => !open)}
               >
@@ -1251,7 +1359,7 @@ export function CotizadorWizard() {
           <Button
             type="button"
             variant="outline"
-            disabled={step === 0 || isGenerating}
+            disabled={step === 0 || isGenerating || isSaving}
             onClick={() => setStep((s) => Math.max(0, s - 1))}
           >
             Atrás
@@ -1265,20 +1373,37 @@ export function CotizadorWizard() {
               {ratesLoading ? "Cargando cotizaciones…" : "Continuar"}
             </Button>
           ) : (
-            <Button
-              type="button"
-              disabled={isGenerating}
-              onClick={() => void handleSubmit(onGenerate)()}
-            >
-              {isGenerating ? (
-                <>
-                  <Loader2 className="animate-spin" />
-                  Generando PDF...
-                </>
-              ) : (
-                "Generar PDF"
-              )}
-            </Button>
+            <div className="flex flex-wrap gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isGenerating || isSaving}
+                onClick={() => void handleSubmit(onSave)()}
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="animate-spin" />
+                    Guardando…
+                  </>
+                ) : (
+                  "Guardar cotización"
+                )}
+              </Button>
+              <Button
+                type="button"
+                disabled={isGenerating || isSaving}
+                onClick={() => void handleSubmit(onGenerate)()}
+              >
+                {isGenerating ? (
+                  <>
+                    <Loader2 className="animate-spin" />
+                    Generando PDF...
+                  </>
+                ) : (
+                  "Generar PDF"
+                )}
+              </Button>
+            </div>
           )}
         </div>
       </form>

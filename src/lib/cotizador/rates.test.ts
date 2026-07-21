@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_FORMULA_PARAMS } from "@/lib/cotizador/params";
 import {
+  buildRatesApiResponse,
   convertCatalogAmountToForm,
   type FxRatesMap,
+  isFxRatesMap,
   normalizeSheetRates,
   parseRatesCsv,
+  pickFxRatesMap,
   RatesError,
 } from "@/lib/cotizador/rates";
 
@@ -115,5 +119,39 @@ describe("parseRatesCsv", () => {
 
   it("rejects header/value length mismatch", () => {
     expect(() => parseRatesCsv("USD,ARS,BRL\n1,1420")).toThrow(/mismatch/);
+  });
+});
+
+describe("pickFxRatesMap / buildRatesApiResponse", () => {
+  const flatRates: FxRatesMap = {
+    USD: 1,
+    ARS: 1420,
+    CLP: 950,
+    COP: 4100,
+    PIX: 5.5,
+    PEN: 3.75,
+  };
+
+  it("isFxRatesMap accepts flat rates plus formulaParams sibling", () => {
+    expect(
+      isFxRatesMap({ ...flatRates, formulaParams: DEFAULT_FORMULA_PARAMS }),
+    ).toBe(true);
+  });
+
+  it("pickFxRatesMap strips formulaParams", () => {
+    const picked = pickFxRatesMap(buildRatesApiResponse(flatRates));
+    expect(picked).toEqual(flatRates);
+    expect(picked).not.toHaveProperty("formulaParams");
+  });
+
+  it("buildRatesApiResponse adds DEFAULT_FORMULA_PARAMS", () => {
+    const payload = buildRatesApiResponse(flatRates);
+    expect(payload.formulaParams).toEqual(DEFAULT_FORMULA_PARAMS);
+    expect(payload.USD).toBe(1);
+    expect(payload.ARS).toBe(1420);
+  });
+
+  it("pickFxRatesMap returns null for incomplete maps", () => {
+    expect(pickFxRatesMap({ USD: 1 })).toBeNull();
   });
 });

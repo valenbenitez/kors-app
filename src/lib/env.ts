@@ -168,3 +168,40 @@ export function getAiGatewayEnv(): AiGatewayEnv {
 
   return parsed.data;
 }
+
+const googleDriveEnvSchema = z.object({
+  GOOGLE_DRIVE_FOLDER_ID: z.string().min(1),
+  GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON: z.string().min(1),
+});
+
+export type GoogleDriveEnv = z.infer<typeof googleDriveEnvSchema>;
+
+/**
+ * Optional Google Drive credentials for PDF upload.
+ * Returns null when unset (callers should use the noop Drive adapter).
+ */
+export function getGoogleDriveEnv(): GoogleDriveEnv | null {
+  const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID?.trim();
+  const serviceAccountJson =
+    process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON?.trim();
+
+  if (!folderId && !serviceAccountJson) {
+    return null;
+  }
+
+  const parsed = googleDriveEnvSchema.safeParse({
+    GOOGLE_DRIVE_FOLDER_ID: folderId,
+    GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON: serviceAccountJson,
+  });
+
+  if (!parsed.success) {
+    const missing = parsed.error.issues
+      .map((issue) => issue.path.join("."))
+      .join(", ");
+    throw new Error(
+      `Incomplete Google Drive env: ${missing}. Set both GOOGLE_DRIVE_FOLDER_ID and GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON, or unset both.`,
+    );
+  }
+
+  return parsed.data;
+}

@@ -83,7 +83,8 @@ describe("formToFormulaInput — multi-currency → USD final", () => {
         {
           ...emptyDestino("Río Negro"),
           moneda: "CLP",
-          hotelAdultoArs: 950_000,
+          hotelNoches: 1,
+          hotelAdultoNocheArs: 950_000,
           hotelNombre: "Hotel Test",
           hotelCategoria: "4★",
           hotelRegimen: "desayuno",
@@ -95,7 +96,7 @@ describe("formToFormulaInput — multi-currency → USD final", () => {
 
     const input = formToFormulaInput(form, rates);
     expect(input.tcArsUsd).toBe(rates.ARS);
-    expect(input.destinos[0].hotelAdultoArs).toBe(1000 * rates.ARS);
+    expect(input.destinos[0].hotelAdultoNocheArs).toBe(1000 * rates.ARS);
 
     const result = calcularCotizacion(input);
 

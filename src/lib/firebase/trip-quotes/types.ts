@@ -8,6 +8,10 @@ import {
 export const TRIP_QUOTE_STATUSES = ["draft", "generated", "sent"] as const;
 export type TripQuoteStatus = (typeof TRIP_QUOTE_STATUSES)[number];
 
+/** Client-facing USD rounding stamp (formula v2.8 CEILING). */
+export const ROUNDING_RULE_CEILING_V1 = "CEILING_v1" as const;
+export type RoundingRule = typeof ROUNDING_RULE_CEILING_V1;
+
 const destinoBreakdownSchema = z.object({
   destino: z.string(),
   subtotalUsd: z.number(),
@@ -41,7 +45,10 @@ export const tripQuoteCreatedBySchema = z.object({
 
 export type TripQuoteCreatedBy = z.infer<typeof tripQuoteCreatedBySchema>;
 
-/** Firestore payload before id / Date conversion. */
+/**
+ * Firestore payload before id / Date conversion.
+ * Denormalized fields are optional for back-compat with older docs.
+ */
 export const tripQuoteFirestoreSchema = z.object({
   cotNumber: z.string().min(1),
   status: tripQuoteStatusSchema,
@@ -50,6 +57,17 @@ export const tripQuoteFirestoreSchema = z.object({
   createdBy: tripQuoteCreatedBySchema,
   form: cotizacionFormSchema,
   result: formulaResultSchema,
+  pdfClienteUrl: z.string().nullable().optional(),
+  pdfStoragePath: z.string().nullable().optional(),
+  driveFileId: z.string().nullable().optional(),
+  roundingRule: z.literal(ROUNDING_RULE_CEILING_V1).optional(),
+  costoNetoUsd: z.number().optional(),
+  margenAgenciaUsd: z.number().optional(),
+  margenVendedorUsd: z.number().optional(),
+  precioFinalCliente: z.number().optional(),
+  perfil: z.string().optional(),
+  premiumTag: z.boolean().optional(),
+  clienteNombre: z.string().optional(),
 });
 
 export type TripQuoteDoc = {
@@ -61,6 +79,17 @@ export type TripQuoteDoc = {
   createdBy: TripQuoteCreatedBy;
   form: CotizacionFormInput;
   result: FormulaResult;
+  pdfClienteUrl?: string | null;
+  pdfStoragePath?: string | null;
+  driveFileId?: string | null;
+  roundingRule?: RoundingRule;
+  costoNetoUsd?: number;
+  margenAgenciaUsd?: number;
+  margenVendedorUsd?: number;
+  precioFinalCliente?: number;
+  perfil?: string;
+  premiumTag?: boolean;
+  clienteNombre?: string;
 };
 
 /** Input for create — timestamps are set by the repository. */
@@ -70,4 +99,15 @@ export type CreateTripQuoteInput = {
   form: CotizacionFormInput;
   result: FormulaResult;
   createdBy: TripQuoteCreatedBy;
+  pdfClienteUrl?: string | null;
+  pdfStoragePath?: string | null;
+  driveFileId?: string | null;
+  roundingRule?: RoundingRule;
+  costoNetoUsd?: number;
+  margenAgenciaUsd?: number;
+  margenVendedorUsd?: number;
+  precioFinalCliente?: number;
+  perfil?: string;
+  premiumTag?: boolean;
+  clienteNombre?: string;
 };

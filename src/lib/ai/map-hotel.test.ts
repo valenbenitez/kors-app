@@ -8,9 +8,10 @@ import {
   UnreadableImageError,
 } from "@/lib/ai/errors";
 import {
-  computeHotelAdultoArs,
+  computeHotelAdultoNocheArs,
   mapHotelCategoria,
   mapHotelExtract,
+  parseNightsFromStayDetail,
 } from "@/lib/ai/map-hotel";
 import {
   extractQuoteImageResponseSchema,
@@ -24,13 +25,24 @@ function loadFixture(name: string): unknown {
   return JSON.parse(readFileSync(join(fixturesDir, name), "utf8"));
 }
 
-describe("computeHotelAdultoArs", () => {
-  test("divides total by adults with ROUND_HALF_UP to integer pesos", () => {
-    // 100_001 / 2 = 50_000.5 → 50_001
-    expect(computeHotelAdultoArs(100_001, 2)).toBe(50_001);
-    expect(computeHotelAdultoArs(100_000, 2)).toBe(50_000);
-    expect(computeHotelAdultoArs(99_999, 2)).toBe(50_000);
-    expect(computeHotelAdultoArs(450_000, 3)).toBe(150_000);
+describe("parseNightsFromStayDetail", () => {
+  test.each([
+    ["3 noches · 2 adultos", 3],
+    ["1 noche", 1],
+    ["Estadía 5 noches", 5],
+    ["sin detalle", null],
+    ["", null],
+  ] as const)("parses %j → %j", (raw, expected) => {
+    expect(parseNightsFromStayDetail(raw)).toBe(expected);
+  });
+});
+
+describe("computeHotelAdultoNocheArs", () => {
+  test("divides total by adults and nights with ROUND_HALF_UP to integer", () => {
+    // 100_001 / 2 / 3 = 16_666.833… → 16_667
+    expect(computeHotelAdultoNocheArs(100_001, 2, 3)).toBe(16_667);
+    expect(computeHotelAdultoNocheArs(100_000, 2, 2)).toBe(25_000);
+    expect(computeHotelAdultoNocheArs(450_000, 3, 2)).toBe(75_000);
   });
 });
 
@@ -51,7 +63,7 @@ describe("mapHotelCategoria", () => {
 });
 
 describe("mapHotelExtract", () => {
-  test("maps fixture to form fields and computes hotelAdultoArs", () => {
+  test("maps fixture to form fields and computes hotelAdultoNocheArs", () => {
     const llm = hotelLlmSchema.parse(loadFixture("hotel-llm.json"));
     const { fields, warnings } = mapHotelExtract({
       llm,
@@ -67,7 +79,8 @@ describe("mapHotelExtract", () => {
     expect(fields.hotelExcluye).toContain("Spa");
     expect(fields.hotelCondiciones).toContain("No reembolsable");
     expect(fields.hotelTotalDetectado).toBe(100_001);
-    expect(fields.hotelAdultoArs).toBe(50_001);
+    expect(fields.hotelNoches).toBe(3);
+    expect(fields.hotelAdultoNocheArs).toBe(16_667);
     expect(fields.hotelEstadiaDetalle).toContain("3 noches");
     expect(fields.moneda).toBe("ARS");
     expect(warnings.some((w) => w.includes("HALF_UP"))).toBe(true);
@@ -89,7 +102,21 @@ describe("mapHotelExtract", () => {
     );
     const { fields } = mapHotelExtract({ llm, paxAdultos: 3 });
     expect(fields.hotelCategoria).toBe("4★");
-    expect(fields.hotelAdultoArs).toBe(150_000);
+    expect(fields.hotelNoches).toBe(2);
+    expect(fields.hotelAdultoNocheArs).toBe(75_000);
+  });
+
+  test("does not invent night rate when nights are not parseable", () => {
+    const base = hotelLlmSchema.parse(loadFixture("hotel-llm.json"));
+    const llm = { ...base, stayDetail: "check-in 10/08 · 2 adultos" };
+    const { fields, warnings } = mapHotelExtract({ llm, paxAdultos: 2 });
+
+    expect(fields.hotelNoches).toBe(0);
+    expect(fields.hotelAdultoNocheArs).toBe(0);
+    expect(fields.hotelTotalDetectado).toBe(100_001);
+    expect(warnings.some((w) => w.includes("sin noches parseables"))).toBe(
+      true,
+    );
   });
 
   test("accepts usable extract when imageReadable is false (defensive)", () => {
@@ -98,7 +125,7 @@ describe("mapHotelExtract", () => {
     const { fields, warnings } = mapHotelExtract({ llm, paxAdultos: 2 });
 
     expect(fields.hotelNombre).toBe("Iguazú Grand Hotel Resort & Casino");
-    expect(fields.hotelAdultoArs).toBe(50_001);
+    expect(fields.hotelAdultoNocheArs).toBe(16_667);
     expect(warnings.some((w) => w.includes("poco legible"))).toBe(true);
   });
 

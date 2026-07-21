@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { parseRatesCsv, RatesError } from "@/lib/cotizador/rates";
+import {
+  buildRatesApiResponse,
+  parseRatesCsv,
+  RatesError,
+} from "@/lib/cotizador/rates";
 
 export async function GET() {
   const ratesUrl = process.env.RATES_URL;
@@ -19,7 +23,7 @@ export async function GET() {
     });
 
     const rates = parseRatesCsv(text);
-    return NextResponse.json(rates);
+    return NextResponse.json(buildRatesApiResponse(rates));
   } catch (error) {
     const message =
       error instanceof RatesError

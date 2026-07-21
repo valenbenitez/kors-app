@@ -90,7 +90,8 @@ describe("ImagePrefillUpload — hotel", () => {
           hotelIncluye: "WiFi",
           hotelExcluye: "Spa",
           hotelCondiciones: "No reembolsable",
-          hotelAdultoArs: 213788,
+          hotelNoches: 3,
+          hotelAdultoNocheArs: 71_263,
           hotelTotalDetectado: 427575,
           hotelEstadiaDetalle: "3 noches",
           moneda: "ARS",
@@ -136,12 +137,179 @@ describe("ImagePrefillUpload — hotel", () => {
     expect(body.get("tipo")).toBe("hotel");
     expect(body.get("paxAdultos")).toBe("2");
     expect(body.get("moneda")).toBe("USD");
+    expect(body.getAll("image")).toHaveLength(1);
 
     await waitFor(() => expect(onPrefill).toHaveBeenCalled());
     const paths = setValue.mock.calls.map(([path]) => path);
     expect(paths).toContain("destinos.1.hotelNombre");
-    expect(paths).toContain("destinos.1.hotelAdultoArs");
+    expect(paths).toContain("destinos.1.hotelAdultoNocheArs");
+    expect(paths).toContain("destinos.1.hotelNoches");
     expect(paths.every((p) => String(p).startsWith("destinos.1."))).toBe(true);
     expect(screen.getByText(/Campos completados/i)).toBeInTheDocument();
+  });
+
+  it("appends multiple hotel images as repeated image fields", async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        tipo: "hotel",
+        fields: {
+          hotelNombre: "Hotel Multi",
+          hotelCategoria: "4★",
+          hotelUbicacion: "Iguazú",
+          hotelHabitacion: "Doble",
+          hotelRegimen: "Desayuno",
+          hotelIncluye: "WiFi",
+          hotelExcluye: "",
+          hotelCondiciones: "",
+          hotelNoches: 2,
+          hotelAdultoNocheArs: 50_000,
+          hotelTotalDetectado: 100_000,
+          hotelEstadiaDetalle: "2 noches",
+          moneda: "ARS",
+        },
+        warnings: ["Una captura no era legible; se usaron las demás."],
+      }),
+    } as unknown as Response);
+
+    const setValue = vi.fn();
+    const getValues = vi.fn(() => ({ destinos: [{ moneda: "ARS" }] }));
+    const user = userEvent.setup();
+
+    render(
+      <ImagePrefillUpload
+        tipo="hotel"
+        destinoIndex={0}
+        paxAdultos={2}
+        setValue={setValue as never}
+        getValues={getValues as never}
+      />,
+    );
+
+    const input = document.querySelector(
+      'input[type="file"][accept*="image/jpeg"]',
+    ) as HTMLInputElement;
+    expect(input.multiple).toBe(true);
+
+    await user.upload(input, [
+      new File(["a"], "rate.png", { type: "image/png" }),
+      new File(["b"], "conds.png", { type: "image/png" }),
+    ]);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const body = fetchMock.mock.calls[0]?.[1]?.body as FormData;
+    expect(body.getAll("image")).toHaveLength(2);
+    expect(body.get("tipo")).toBe("hotel");
+    expect(await screen.findByText(/Avisos/i)).toBeInTheDocument();
+  });
+});
+
+describe("ImagePrefillUpload — vuelo", () => {
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  const vueloFields = {
+    aerolinea: "Aerolíneas Argentinas",
+    vueloIdaFecha: "2026-08-10",
+    vueloIdaHoraSalida: "20:58",
+    vueloIdaHoraLlegada: "22:52",
+    vueloIdaNumero: "AR3150",
+    vueloIdaAeropuertoSalida: "EZE",
+    vueloIdaAeropuertoLlegada: "IGR",
+    vueloVueltaFecha: "2026-08-15",
+    vueloVueltaHoraSalida: "18:10",
+    vueloVueltaHoraLlegada: "20:05",
+    vueloVueltaNumero: "AR3151",
+    vueloVueltaAeropuertoSalida: "IGR",
+    vueloVueltaAeropuertoLlegada: "EZE",
+  };
+
+  it("appends a single vuelo image (regression)", async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        tipo: "vuelo",
+        fields: vueloFields,
+        warnings: [],
+      }),
+    } as unknown as Response);
+
+    const setValue = vi.fn();
+    const getValues = vi.fn((name?: string) => {
+      if (name === "destinos") return [];
+      if (!name) return { destinos: [] };
+      return "";
+    });
+    const user = userEvent.setup();
+
+    render(
+      <ImagePrefillUpload
+        tipo="vuelo"
+        setValue={setValue as never}
+        getValues={getValues as never}
+      />,
+    );
+
+    const input = document.querySelector(
+      'input[type="file"][accept*="image/jpeg"]',
+    ) as HTMLInputElement;
+    expect(input.multiple).toBe(true);
+
+    await user.upload(input, new File(["x"], "ida.png", { type: "image/png" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const body = fetchMock.mock.calls[0]?.[1]?.body as FormData;
+    expect(body.getAll("image")).toHaveLength(1);
+    expect(body.get("tipo")).toBe("vuelo");
+  });
+
+  it("appends multiple vuelo images as repeated image fields", async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        tipo: "vuelo",
+        fields: vueloFields,
+        warnings: ["Una captura no era legible; se usaron las demás."],
+      }),
+    } as unknown as Response);
+
+    const setValue = vi.fn();
+    const getValues = vi.fn((name?: string) => {
+      if (name === "destinos") return [];
+      if (!name) return { destinos: [] };
+      return "";
+    });
+    const user = userEvent.setup();
+
+    render(
+      <ImagePrefillUpload
+        tipo="vuelo"
+        setValue={setValue as never}
+        getValues={getValues as never}
+      />,
+    );
+
+    const input = document.querySelector(
+      'input[type="file"][accept*="image/jpeg"]',
+    ) as HTMLInputElement;
+    expect(input.multiple).toBe(true);
+
+    await user.upload(input, [
+      new File(["a"], "ida.png", { type: "image/png" }),
+      new File(["b"], "vuelta.png", { type: "image/png" }),
+    ]);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const body = fetchMock.mock.calls[0]?.[1]?.body as FormData;
+    expect(body.getAll("image")).toHaveLength(2);
+    expect(body.get("tipo")).toBe("vuelo");
+    expect(await screen.findByText(/Avisos/i)).toBeInTheDocument();
   });
 });

@@ -1,5 +1,9 @@
 import Decimal from "decimal.js";
-import { FX_RATES_TO_USD } from "@/lib/cotizador/params";
+import {
+  DEFAULT_FORMULA_PARAMS,
+  type FormulaParamsPublic,
+  FX_RATES_TO_USD,
+} from "@/lib/cotizador/params";
 import type { FormMoneda } from "@/lib/validations/cotizacion";
 import { MONEDAS } from "@/lib/validations/cotizacion";
 
@@ -7,6 +11,14 @@ Decimal.set({ precision: 28, rounding: Decimal.ROUND_HALF_UP });
 
 /** Units of local currency per 1 USD, keyed by form currency codes. */
 export type FxRatesMap = Record<FormMoneda, number>;
+
+/**
+ * `GET /api/rates` payload: flat currency keys (back-compat) plus optional
+ * `formulaParams` sibling. Clients that only read USD/ARS ignore the extra key.
+ */
+export type RatesApiResponse = FxRatesMap & {
+  formulaParams: FormulaParamsPublic;
+};
 
 /** Convert catalog amount (ARS|USD) to form currency using rates map. */
 export function convertCatalogAmountToForm(
@@ -171,7 +183,7 @@ export async function resolveRates(): Promise<{
   }
 }
 
-/** Type guard: every FormMoneda key is present and finite > 0. */
+/** Type guard: every FormMoneda key is present and finite > 0 (ignores extras). */
 export function isFxRatesMap(value: unknown): value is FxRatesMap {
   if (!value || typeof value !== "object") return false;
   const record = value as Record<string, unknown>;
@@ -180,4 +192,26 @@ export function isFxRatesMap(value: unknown): value is FxRatesMap {
     if (typeof n !== "number" || !Number.isFinite(n) || n <= 0) return false;
   }
   return true;
+}
+
+/**
+ * Strips non-currency keys (e.g. `formulaParams`) from an API/rates payload.
+ * Returns null when currency keys fail {@link isFxRatesMap}.
+ */
+export function pickFxRatesMap(value: unknown): FxRatesMap | null {
+  if (!isFxRatesMap(value)) return null;
+  const record = value as Record<string, unknown>;
+  const rates = {} as FxRatesMap;
+  for (const key of FORM_RATE_KEYS) {
+    rates[key] = record[key] as number;
+  }
+  return rates;
+}
+
+/** Builds the additive `GET /api/rates` JSON (flat FX + formulaParams). */
+export function buildRatesApiResponse(rates: FxRatesMap): RatesApiResponse {
+  return {
+    ...rates,
+    formulaParams: { ...DEFAULT_FORMULA_PARAMS },
+  };
 }

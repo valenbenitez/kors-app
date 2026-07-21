@@ -119,9 +119,14 @@ export const hotelFieldsSchema = z.object({
   hotelIncluye: z.string(),
   hotelExcluye: z.string(),
   hotelCondiciones: z.string(),
-  /** Per-adult ARS (or form currency) = total ÷ paxAdultos, ROUND_HALF_UP to integer. */
-  hotelAdultoArs: z.number().nonnegative(),
-  /** Raw total from the image before dividing by adults; 0 if unknown. */
+  /** Nights parsed from stay detail when available; 0 if unknown. */
+  hotelNoches: z.number().int().nonnegative(),
+  /**
+   * Per-adult per-night = total ÷ paxAdultos ÷ nights, ROUND_HALF_UP to integer.
+   * 0 when nights unknown (do not invent from stay total alone).
+   */
+  hotelAdultoNocheArs: z.number().nonnegative(),
+  /** Raw total from the image before dividing by adults/nights; 0 if unknown. */
   hotelTotalDetectado: z.number().nonnegative(),
   /** Stay detail text (nights/guests); not a form field — UI may show as hint. */
   hotelEstadiaDetalle: z.string(),

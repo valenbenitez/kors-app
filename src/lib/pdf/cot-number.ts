@@ -1,9 +1,13 @@
 /**
- * Numeración COT-XXXX (4 dígitos).
- *
- * MVP sin DB: usa los últimos 4 dígitos de `Date.now()`.
- * Limitación: colisiones posibles bajo alta concurrencia; persistir contador
- * cuando haya backend de cotizaciones.
+ * Cot number helpers (filename). Sequential allocation lives in
+ * `src/lib/firebase/counters/cotizaciones.ts` (`allocateCotNumber`).
+ */
+
+export { formatCotNumber } from "@/lib/firebase/counters/cotizaciones";
+
+/**
+ * @deprecated Prefer `allocateCotNumber` for persisted quotes.
+ * Kept for preview / offline callers that only need a display stub.
  */
 export function generateCotNumber(now = Date.now()): string {
   const n = now % 10_000;

@@ -16,7 +16,7 @@ import { fallbackFxRates } from "@/lib/cotizador/rates";
 const fetchMock = vi.fn<typeof fetch>();
 
 function ratesResponse(
-  rates: Record<string, number> = fallbackFxRates(),
+  rates: Record<string, unknown> = fallbackFxRates(),
 ): Response {
   return {
     ok: true,
@@ -97,10 +97,30 @@ function generatePdfCalls() {
   );
 }
 
+function cotizacionesCalls() {
+  return fetchMock.mock.calls.filter(
+    ([url]) => typeof url === "string" && url.includes("/api/cotizaciones"),
+  );
+}
+
 function previewPdfCalls() {
   return fetchMock.mock.calls.filter(
     ([url]) => typeof url === "string" && url.includes("/api/preview-pdf"),
   );
+}
+
+function saveResponse(
+  cotNumber = "COT-0007",
+  pdfDriveUrl: string | null = null,
+): Response {
+  return {
+    ok: true,
+    json: async () => ({
+      cot_number: cotNumber,
+      pdf_drive_url: pdfDriveUrl,
+      saved_at: "2026-07-21T18:00:00.000Z",
+    }),
+  } as unknown as Response;
 }
 
 beforeEach(() => {
@@ -171,6 +191,37 @@ describe("CotizadorWizard — generación del PDF", () => {
     await settle();
 
     expect(generatePdfCalls()).toHaveLength(0);
+  });
+
+  it("con formulario válido, click en Guardar cotización llama a /api/cotizaciones", async () => {
+    fetchMock.mockImplementation((input) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.includes("/api/rates")) {
+        return Promise.resolve(ratesResponse());
+      }
+      if (url.includes("/api/cotizaciones")) {
+        return Promise.resolve(saveResponse("COT-0007"));
+      }
+      return Promise.resolve(pdfResponse());
+    });
+    const user = userEvent.setup();
+    render(<CotizadorWizard />);
+
+    await goToFinalStep(user);
+    await user.click(
+      screen.getByRole("button", { name: "Guardar cotización" }),
+    );
+
+    await waitFor(() => expect(cotizacionesCalls()).toHaveLength(1));
+    expect(cotizacionesCalls()[0]?.[0]).toBe("/api/cotizaciones");
+    expect(cotizacionesCalls()[0]?.[1]).toEqual(
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(generatePdfCalls()).toHaveLength(0);
+
+    const status = await screen.findByRole("status");
+    expect(status).toHaveTextContent("COT-0007");
+    expect(status).toHaveTextContent("Cotización guardada");
   });
 
   it("con formulario válido, click en Generar PDF llama exactamente 1 vez a fetch", async () => {
@@ -300,7 +351,7 @@ describe("CotizadorWizard — generación del PDF", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows live TC when /api/rates succeeds", async () => {
+  it("shows live TC when /api/rates succeeds (ignores formulaParams)", async () => {
     fetchMock.mockImplementation((input) => {
       const url = typeof input === "string" ? input : input.url;
       if (url.includes("/api/rates")) {
@@ -312,6 +363,16 @@ describe("CotizadorWizard — generación del PDF", () => {
             COP: 4100,
             PIX: 5.5,
             PEN: 3.75,
+            formulaParams: {
+              tcArsUsd: 1500,
+              flightTaxPct: 0.05,
+              hotelTaxPct: 0.03,
+              agencyMarginPct: 0.3,
+              cardFeePct: 0.1,
+              beetransferFeePct: 0.03,
+              cashFeePct: 0,
+              sellerMarginPct: 0.05,
+            },
           }),
         );
       }
@@ -321,6 +382,7 @@ describe("CotizadorWizard — generación del PDF", () => {
     await waitFor(() => {
       expect(screen.getByText(/TC ARS\/USD 1500/)).toBeInTheDocument();
     });
+    expect(screen.getByText(/fórmula v2\.8/)).toBeInTheDocument();
     expect(screen.queryByText(/fallback/)).not.toBeInTheDocument();
   });
 
@@ -371,7 +433,7 @@ describe("CotizadorWizard — campos vuelo/hotel prefill", () => {
     await user.click(screen.getByRole("button", { name: "Continuar" }));
 
     await screen.findByLabelText("Hotel incluye (opcional)");
-    expect(screen.getByText(/Hotel por adulto/i)).toBeInTheDocument();
+    expect(screen.getByText(/Hotel adulto \/ noche/i)).toBeInTheDocument();
     expect(
       screen.queryByLabelText("Vuelo ida adulto (ARS)"),
     ).not.toBeInTheDocument();
@@ -447,7 +509,7 @@ describe("CotizadorWizard — AI flight image prefill", () => {
       screen.getByText("Prefill desde imagen de vuelo"),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Subir imagen de vuelo" }),
+      screen.getByRole("button", { name: "Subir imágenes de vuelo" }),
     ).toBeInTheDocument();
     expect(
       screen.queryByText("Prefill desde imagen de hotel"),
@@ -599,7 +661,8 @@ describe("CotizadorWizard — AI hotel image prefill", () => {
           hotelIncluye: "WiFi\nPileta",
           hotelExcluye: "Spa",
           hotelCondiciones: "No reembolsable",
-          hotelAdultoArs: 213788,
+          hotelNoches: 3,
+          hotelAdultoNocheArs: 71_263,
           hotelTotalDetectado: 427575,
           hotelEstadiaDetalle: "3 noches · 2 adultos",
           moneda: "ARS",
@@ -628,7 +691,7 @@ describe("CotizadorWizard — AI hotel image prefill", () => {
       screen.getByText("Prefill desde imagen de hotel"),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Subir imagen de hotel" }),
+      screen.getByRole("button", { name: "Subir imágenes de hotel" }),
     ).toBeInTheDocument();
     expect(
       screen.queryByText("Prefill desde imagen de vuelo"),
@@ -657,7 +720,7 @@ describe("CotizadorWizard — AI hotel image prefill", () => {
     await screen.findAllByText("Prefill desde imagen de hotel");
 
     const hotelUploads = screen.getAllByRole("button", {
-      name: "Subir imagen de hotel",
+      name: "Subir imágenes de hotel",
     });
     expect(hotelUploads).toHaveLength(2);
 
@@ -694,14 +757,16 @@ describe("CotizadorWizard — AI hotel image prefill", () => {
     expect(
       document.getElementById("hotelIncluye-1") as HTMLTextAreaElement,
     ).toHaveValue("");
-    expect(screen.getByDisplayValue("213.788")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("71.263")).toBeInTheDocument();
 
     // Only one destino got the hotel name (Misiones); Salta stays empty.
     expect(screen.getAllByDisplayValue("Hotel Saint George")).toHaveLength(1);
     expect(screen.getByText("Salta")).toBeInTheDocument();
 
     expect(await screen.findByText(/Campos completados/i)).toBeInTheDocument();
-    expect(screen.getByText("Hotel por adulto")).toBeInTheDocument();
+    expect(
+      screen.getByText("Hotel adulto / noche", { exact: true }),
+    ).toBeInTheDocument();
     expect(screen.getByDisplayValue("Hotel Saint George")).not.toBeDisabled();
   });
 

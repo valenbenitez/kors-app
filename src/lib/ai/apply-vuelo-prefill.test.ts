@@ -149,7 +149,11 @@ describe("applyVueloPrefill", () => {
 
   it("does not set empty string fields", () => {
     const setValue = vi.fn();
-    const getValues = vi.fn(() => defaultCotizacionValues.destinos);
+    const getValues = vi.fn((name?: string) => {
+      if (name === "destinos") return defaultCotizacionValues.destinos;
+      if (!name) return defaultCotizacionValues;
+      return (defaultCotizacionValues as Record<string, unknown>)[name];
+    });
 
     applyVueloPrefill(
       baseFields({
@@ -175,5 +179,90 @@ describe("applyVueloPrefill", () => {
     expect(paths).toContain("vueloIdaNumero");
     expect(paths).not.toContain("aerolinea");
     expect(paths).not.toContain("fechaIda");
+  });
+
+  it("skips non-empty trip strings already filled by the seller", () => {
+    const values: CotizacionFormInput = {
+      ...defaultCotizacionValues,
+      aerolinea: "LATAM",
+      vueloIdaNumero: "LA800",
+      fechaIda: "2026-09-01",
+    };
+    const setValue = mockSetValue(values);
+    const getValues = vi.fn((name?: string) => {
+      if (!name) return values;
+      const parts = name.split(".");
+      let cursor: unknown = values;
+      for (const p of parts) {
+        cursor = (cursor as Record<string, unknown>)[p];
+      }
+      return cursor;
+    });
+
+    const result = applyVueloPrefill(
+      baseFields({
+        aerolinea: "Aerolíneas Argentinas",
+        vueloIdaNumero: "AR3150",
+        vueloIdaFecha: "2026-08-10",
+      }),
+      setValue as never,
+      getValues as never,
+    );
+
+    expect(values.aerolinea).toBe("LATAM");
+    expect(values.vueloIdaNumero).toBe("LA800");
+    expect(values.fechaIda).toBe("2026-09-01");
+    expect(values.vueloIdaFecha).toBe("2026-08-10");
+    expect(result.skippedFilledLabels).toEqual(
+      expect.arrayContaining([
+        VUELO_PREFILL_LABELS.aerolinea,
+        VUELO_PREFILL_LABELS.vueloIdaNumero,
+        VUELO_PREFILL_LABELS.fechaIda,
+      ]),
+    );
+    expect(result.filledLabels).toContain(VUELO_PREFILL_LABELS.vueloIdaFecha);
+  });
+
+  it("skips positive flight prices and moneda when seller already has prices", () => {
+    const destino = {
+      ...emptyDestino("Misiones"),
+      vueloIdaAdultoArs: 99_000,
+      moneda: "USD" as const,
+    };
+    const values: CotizacionFormInput = {
+      ...defaultCotizacionValues,
+      destinos: [destino],
+    };
+    const setValue = mockSetValue(values);
+    const getValues = vi.fn((name?: string) => {
+      if (!name) return values;
+      const parts = name.split(".");
+      let cursor: unknown = values;
+      for (const p of parts) {
+        cursor = (cursor as Record<string, unknown>)[p];
+      }
+      return cursor;
+    });
+
+    const result = applyVueloPrefill(
+      baseFields({
+        vueloIdaAdultoArs: 180_000,
+        vueloVueltaAdultoArs: 175_000,
+        moneda: "ARS",
+      }),
+      setValue as never,
+      getValues as never,
+    );
+
+    expect(values.destinos[0]?.vueloIdaAdultoArs).toBe(99_000);
+    expect(values.destinos[0]?.vueloVueltaAdultoArs).toBe(175_000);
+    expect(values.destinos[0]?.moneda).toBe("USD");
+    expect(result.skippedFilledLabels).toEqual(
+      expect.arrayContaining([
+        VUELO_PREFILL_LABELS["destinos.0.vueloIdaAdultoArs"],
+        VUELO_PREFILL_LABELS["destinos.0.moneda"],
+      ]),
+    );
+    expect(result.filledPaths).toContain("destinos.0.vueloVueltaAdultoArs");
   });
 });

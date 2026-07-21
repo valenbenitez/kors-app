@@ -12,7 +12,8 @@ export const HOTEL_PREFILL_LABELS: Record<string, string> = {
   hotelIncluye: "Hotel incluye",
   hotelExcluye: "Hotel excluye",
   hotelCondiciones: "Condiciones del hotel",
-  hotelAdultoArs: "Hotel por adulto",
+  hotelNoches: "Noches",
+  hotelAdultoNocheArs: "Hotel adulto / noche",
   moneda: "Moneda del destino",
 };
 
@@ -62,15 +63,28 @@ export function applyHotelPrefill(
     }
   }
 
-  // API already computed hotelAdultoArs = total ÷ paxAdultos (HALF_UP integer).
-  // Skip 0 so we never wipe an existing seller price when total was unknown.
+  // API already computed hotelAdultoNocheArs = total ÷ pax ÷ nights (HALF_UP).
+  // Skip 0 so we never wipe an existing seller price when nights/total unknown.
   if (
-    typeof fields.hotelAdultoArs === "number" &&
-    Number.isFinite(fields.hotelAdultoArs) &&
-    fields.hotelAdultoArs > 0
+    typeof fields.hotelNoches === "number" &&
+    Number.isFinite(fields.hotelNoches) &&
+    fields.hotelNoches > 0
   ) {
-    const path = `destinos.${destinoIndex}.hotelAdultoArs` as const;
-    setValue(path, fields.hotelAdultoArs, {
+    const path = `destinos.${destinoIndex}.hotelNoches` as const;
+    setValue(path, fields.hotelNoches, {
+      shouldDirty: true,
+      shouldValidate: false,
+    });
+    filledPaths.push(path);
+  }
+
+  if (
+    typeof fields.hotelAdultoNocheArs === "number" &&
+    Number.isFinite(fields.hotelAdultoNocheArs) &&
+    fields.hotelAdultoNocheArs > 0
+  ) {
+    const path = `destinos.${destinoIndex}.hotelAdultoNocheArs` as const;
+    setValue(path, fields.hotelAdultoNocheArs, {
       shouldDirty: true,
       shouldValidate: false,
     });

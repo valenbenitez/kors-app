@@ -9,7 +9,9 @@ import { applyVueloPrefill } from "@/lib/ai/apply-vuelo-prefill";
 import {
   ALLOWED_IMAGE_MIME_TYPES,
   isAllowedImageMime,
+  MAX_HOTEL_IMAGES,
   MAX_IMAGE_BYTES,
+  MAX_VUELO_IMAGES,
 } from "@/lib/ai/constants";
 import {
   type ExtractTipo,
@@ -64,7 +66,7 @@ function validateClientFile(file: File): string | null {
 
 /**
  * Upload control that calls `/api/extract-quote-image` and prefills the form.
- * Reusable for vuelo (3/4) and hotel (4/4) via `tipo`.
+ * Reusable for vuelo and hotel (1..MAX_*_IMAGES) via `tipo`.
  */
 export function ImagePrefillUpload({
   tipo,
@@ -82,27 +84,46 @@ export function ImagePrefillUpload({
   const [filledLabels, setFilledLabels] = useState<string[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
 
+  const allowMultiple = true;
+  const maxImages = tipo === "hotel" ? MAX_HOTEL_IMAGES : MAX_VUELO_IMAGES;
   const title =
     tipo === "vuelo"
       ? "Prefill desde imagen de vuelo"
       : "Prefill desde imagen de hotel";
   const hint =
     tipo === "vuelo"
-      ? "Subí una captura del itinerario (JPEG, PNG o WebP, máx. 10 MB)."
-      : "Subí una captura de la cotización de hotel (JPEG, PNG o WebP, máx. 10 MB).";
+      ? `Subí una o más capturas del itinerario (ida y vuelta si hace falta; hasta ${MAX_VUELO_IMAGES}; JPEG, PNG o WebP, máx. ${MAX_MB} MB c/u).`
+      : `Subí una o más capturas de la cotización de hotel (hasta ${MAX_HOTEL_IMAGES}; JPEG, PNG o WebP, máx. ${MAX_MB} MB c/u).`;
   const loadingHint =
     tipo === "vuelo" ? "Leyendo itinerario…" : "Leyendo cotización de hotel…";
+  const buttonLabel = "Subir imágenes";
+  const ariaLabel =
+    tipo === "vuelo" ? "Subir imágenes de vuelo" : "Subir imágenes de hotel";
 
-  async function handleFile(file: File) {
+  async function handleFiles(fileList: FileList | File[]) {
     setError(null);
     setFilledLabels([]);
     setWarnings([]);
     onPrefill?.([]);
 
-    const clientError = validateClientFile(file);
-    if (clientError) {
-      setError(clientError);
+    const files = Array.from(fileList);
+    if (files.length === 0) return;
+
+    if (files.length > maxImages) {
+      setError(
+        tipo === "hotel"
+          ? `Podés subir hasta ${MAX_HOTEL_IMAGES} imágenes de hotel por vez.`
+          : `Podés subir hasta ${MAX_VUELO_IMAGES} imágenes de vuelo por vez.`,
+      );
       return;
+    }
+
+    for (const file of files) {
+      const clientError = validateClientFile(file);
+      if (clientError) {
+        setError(clientError);
+        return;
+      }
     }
 
     const pax = Number(paxAdultos);
@@ -128,7 +149,9 @@ export function ImagePrefillUpload({
     try {
       const body = new FormData();
       body.set("tipo", tipo);
-      body.set("image", file);
+      for (const file of files) {
+        body.append("image", file);
+      }
       if (tipo === "hotel") {
         body.set("paxAdultos", String(pax));
       }
@@ -179,6 +202,11 @@ export function ImagePrefillUpload({
         const extraWarnings = [...parsed.data.warnings];
         if (result.skippedPricesWarning) {
           extraWarnings.push(result.skippedPricesWarning);
+        }
+        if (result.skippedFilledLabels.length > 0) {
+          extraWarnings.push(
+            `No se sobrescribieron campos ya cargados: ${result.skippedFilledLabels.join(", ")}.`,
+          );
         }
         setFilledLabels(result.filledLabels);
         setWarnings(extraWarnings);
@@ -233,11 +261,14 @@ export function ImagePrefillUpload({
           id={inputId}
           type="file"
           accept={ALLOWED_IMAGE_MIME_TYPES.join(",")}
+          multiple={allowMultiple}
           className="sr-only"
           disabled={loading}
           onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) void handleFile(file);
+            const selected = e.target.files;
+            if (selected && selected.length > 0) {
+              void handleFiles(selected);
+            }
           }}
         />
         <Button
@@ -246,16 +277,14 @@ export function ImagePrefillUpload({
           size="sm"
           disabled={loading}
           onClick={() => inputRef.current?.click()}
-          aria-label={
-            tipo === "vuelo" ? "Subir imagen de vuelo" : "Subir imagen de hotel"
-          }
+          aria-label={ariaLabel}
         >
           {loading ? (
             <Loader2 className="animate-spin" aria-hidden />
           ) : (
             <Upload aria-hidden />
           )}
-          {loading ? "Extrayendo…" : "Subir imagen"}
+          {loading ? "Extrayendo…" : buttonLabel}
         </Button>
         {loading ? (
           <output className="text-xs text-muted-foreground">
