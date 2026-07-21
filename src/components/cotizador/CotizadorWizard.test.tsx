@@ -343,7 +343,7 @@ describe("CotizadorWizard — generación del PDF", () => {
 });
 
 describe("CotizadorWizard — campos vuelo/hotel prefill", () => {
-  it("shows optional flight segment fields on step 0", async () => {
+  it("shows optional flight segment fields and prices on step 0", async () => {
     render(<CotizadorWizard />);
     await waitForRatesReady();
 
@@ -354,6 +354,33 @@ describe("CotizadorWizard — campos vuelo/hotel prefill", () => {
       screen.getByLabelText("Aeropuerto salida ida (IATA)"),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Número de vuelo vuelta")).toBeInTheDocument();
+    expect(screen.getByLabelText("Vuelo ida adulto (ARS)")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Vuelo vuelta adulto (ARS)"),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps flight prices on step 0 and starts Costos with hotel fields", async () => {
+    const user = userEvent.setup();
+    render(<CotizadorWizard />);
+    await waitForRatesReady();
+
+    expect(screen.getByLabelText("Vuelo ida adulto (ARS)")).toBeInTheDocument();
+
+    await fillStep0(user);
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+
+    await screen.findByLabelText("Hotel incluye (opcional)");
+    expect(screen.getByText(/Hotel por adulto/i)).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Vuelo ida adulto (ARS)"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Vuelo ida", { exact: true }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Vuelo vuelta", { exact: true }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows hotel incluye/excluye/condiciones on costos step", async () => {

@@ -9,7 +9,8 @@ import {
 import { getAiGatewayEnv } from "@/lib/env";
 import type { FormMoneda } from "@/lib/validations/cotizacion";
 
-const VUELO_PROMPT = `Extract structured flight itinerary data from this screenshot (Matrix, ITA Matrix, airline, OTA, Booking.com flights, etc.).
+function buildVueloPrompt(currentYear = new Date().getFullYear()): string {
+  return `Extract structured flight itinerary data from this screenshot (Matrix, ITA Matrix, airline, OTA, Booking.com flights, etc.).
 
 imageReadable rules (strict):
 - Set imageReadable=true whenever text/numbers are visible enough to read, even if dense, small, cropped, wide, or dark-themed.
@@ -19,12 +20,14 @@ imageReadable rules (strict):
 
 Other rules:
 - Set isFlightDocument=false if this is not a flight itinerary (e.g. a hotel booking).
-- Dates MUST be YYYY-MM-DD when visible; use empty string if unsure — NEVER invent dates.
+- Dates MUST be YYYY-MM-DD when month/day are visible; use empty string if month/day are unsure — NEVER invent month/day.
+- When month/day are visible but the year is missing or ambiguous (e.g. "Aug 5", "05/08"), assume the current calendar year (${currentYear}). Only use another year if that year is explicitly visible on the image.
 - Times as HH:mm when visible.
 - Airports: prefer IATA codes (EZE, IGR). If only a city name is visible, put the name and leave mapping to the server.
 - Prices optional — use null when not visible.
 - Never invent flight numbers, airports, or prices.
 - warnings: short notes for a travel agent (Spanish OK).`;
+}
 
 export type ExtractVueloParams = {
   imageBytes: Uint8Array;
@@ -54,7 +57,7 @@ export async function extractVueloFromImage(
       {
         role: "user",
         content: [
-          { type: "text", text: VUELO_PROMPT },
+          { type: "text", text: buildVueloPrompt() },
           {
             type: "file",
             data: params.imageBytes,

@@ -62,6 +62,8 @@ export function MoneyField({
   onValueChange,
   placeholder = "0",
   allowNegative = false,
+  disabled = false,
+  className,
 }: {
   id?: string;
   value: number;
@@ -69,6 +71,8 @@ export function MoneyField({
   onValueChange: (value: number) => void;
   placeholder?: string;
   allowNegative?: boolean;
+  disabled?: boolean;
+  className?: string;
 }) {
   const [display, setDisplay] = useState(() => formatValue(value, currency));
 
@@ -89,7 +93,8 @@ export function MoneyField({
       <Input
         id={id}
         inputMode="decimal"
-        className="pl-9 tabular-nums"
+        disabled={disabled}
+        className={`pl-9 tabular-nums${className ? ` ${className}` : ""}`}
         placeholder={placeholder}
         value={display}
         onChange={(event) => {

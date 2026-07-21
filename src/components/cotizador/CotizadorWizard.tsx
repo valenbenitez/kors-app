@@ -363,6 +363,19 @@ export function CotizadorWizard() {
 
   // Multi-destino: TC header uses the first destino's moneda.
   const headerMoneda = destinosWatch.find((d) => d?.moneda)?.moneda ?? "ARS";
+  // Flight costs bind to destinos[0] only (same as applyVueloPrefill).
+  const flightMoneda = destinosWatch[0]?.moneda ?? "ARS";
+  const hasFlightDestino = destinosWatch.length > 0;
+  const hasMenoresStep0 = paxMenores > 0;
+  const flightCur = (label: string) => `${label} (${flightMoneda})`;
+
+  function setFlightMoneda(m: (typeof MONEDAS)[number]) {
+    if (!hasFlightDestino || m === flightMoneda) return;
+    setValue("destinos.0.moneda", m, { shouldValidate: true });
+    for (const field of DESTINO_MONEY_FIELDS) {
+      setValue(`destinos.0.${field}`, 0, { shouldValidate: true });
+    }
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6 sm:py-8">
@@ -584,7 +597,26 @@ export function CotizadorWizard() {
             />
 
             <div className="space-y-4 rounded-2xl border border-border p-4">
-              <h3 className="text-sm font-semibold">Vuelo ida (opcional)</h3>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold">Vuelo ida (opcional)</h3>
+                <div className="inline-flex flex-wrap justify-end gap-0.5 rounded-full border border-border p-0.5">
+                  {MONEDAS.map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      disabled={!hasFlightDestino}
+                      onClick={() => setFlightMoneda(m)}
+                      className={`rounded-full px-2.5 py-1 text-xs font-medium transition ${
+                        flightMoneda === m
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:text-foreground"
+                      } disabled:cursor-not-allowed disabled:opacity-50`}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 <div className="flex min-w-0 flex-col space-y-2">
                   <Label htmlFor="vueloIdaHoraSalida">Hora salida</Label>
@@ -643,6 +675,45 @@ export function CotizadorWizard() {
                     {...register("vueloIdaAeropuertoLlegada")}
                   />
                 </div>
+              </div>
+              {!hasFlightDestino ? (
+                <p className="text-sm text-muted-foreground">
+                  Seleccioná un destino para cargar precios de vuelo.
+                </p>
+              ) : null}
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="vueloIdaAdultoArs">
+                    {flightCur("Vuelo ida adulto")}
+                  </Label>
+                  <MoneyField
+                    id="vueloIdaAdultoArs"
+                    currency={flightMoneda}
+                    disabled={!hasFlightDestino}
+                    className={prefillClass("destinos.0.vueloIdaAdultoArs")}
+                    value={destinosWatch[0]?.vueloIdaAdultoArs ?? 0}
+                    onValueChange={(v) =>
+                      setValue("destinos.0.vueloIdaAdultoArs", v)
+                    }
+                  />
+                </div>
+                {hasMenoresStep0 ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="vueloIdaMenorArs">
+                      {flightCur("Vuelo ida menor")}
+                    </Label>
+                    <MoneyField
+                      id="vueloIdaMenorArs"
+                      currency={flightMoneda}
+                      disabled={!hasFlightDestino}
+                      className={prefillClass("destinos.0.vueloIdaMenorArs")}
+                      value={destinosWatch[0]?.vueloIdaMenorArs ?? 0}
+                      onValueChange={(v) =>
+                        setValue("destinos.0.vueloIdaMenorArs", v)
+                      }
+                    />
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -708,6 +779,45 @@ export function CotizadorWizard() {
                     {...register("vueloVueltaAeropuertoLlegada")}
                   />
                 </div>
+              </div>
+              {!hasFlightDestino ? (
+                <p className="text-sm text-muted-foreground">
+                  Seleccioná un destino para cargar precios de vuelo.
+                </p>
+              ) : null}
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="vueloVueltaAdultoArs">
+                    {flightCur("Vuelo vuelta adulto")}
+                  </Label>
+                  <MoneyField
+                    id="vueloVueltaAdultoArs"
+                    currency={flightMoneda}
+                    disabled={!hasFlightDestino}
+                    className={prefillClass("destinos.0.vueloVueltaAdultoArs")}
+                    value={destinosWatch[0]?.vueloVueltaAdultoArs ?? 0}
+                    onValueChange={(v) =>
+                      setValue("destinos.0.vueloVueltaAdultoArs", v)
+                    }
+                  />
+                </div>
+                {hasMenoresStep0 ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="vueloVueltaMenorArs">
+                      {flightCur("Vuelo vuelta menor")}
+                    </Label>
+                    <MoneyField
+                      id="vueloVueltaMenorArs"
+                      currency={flightMoneda}
+                      disabled={!hasFlightDestino}
+                      className={prefillClass("destinos.0.vueloVueltaMenorArs")}
+                      value={destinosWatch[0]?.vueloVueltaMenorArs ?? 0}
+                      onValueChange={(v) =>
+                        setValue("destinos.0.vueloVueltaMenorArs", v)
+                      }
+                    />
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -802,50 +912,6 @@ export function CotizadorWizard() {
                   </div>
 
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label>{cur("Vuelo ida adulto")}</Label>
-                      <MoneyField
-                        currency={moneda}
-                        value={destinosWatch[index]?.vueloIdaAdultoArs ?? 0}
-                        onValueChange={(v) =>
-                          setValue(`destinos.${index}.vueloIdaAdultoArs`, v)
-                        }
-                      />
-                    </div>
-                    {hasMenores ? (
-                      <div className="space-y-2">
-                        <Label>{cur("Vuelo ida menor")}</Label>
-                        <MoneyField
-                          currency={moneda}
-                          value={destinosWatch[index]?.vueloIdaMenorArs ?? 0}
-                          onValueChange={(v) =>
-                            setValue(`destinos.${index}.vueloIdaMenorArs`, v)
-                          }
-                        />
-                      </div>
-                    ) : null}
-                    <div className="space-y-2">
-                      <Label>{cur("Vuelo vuelta adulto")}</Label>
-                      <MoneyField
-                        currency={moneda}
-                        value={destinosWatch[index]?.vueloVueltaAdultoArs ?? 0}
-                        onValueChange={(v) =>
-                          setValue(`destinos.${index}.vueloVueltaAdultoArs`, v)
-                        }
-                      />
-                    </div>
-                    {hasMenores ? (
-                      <div className="space-y-2">
-                        <Label>{cur("Vuelo vuelta menor")}</Label>
-                        <MoneyField
-                          currency={moneda}
-                          value={destinosWatch[index]?.vueloVueltaMenorArs ?? 0}
-                          onValueChange={(v) =>
-                            setValue(`destinos.${index}.vueloVueltaMenorArs`, v)
-                          }
-                        />
-                      </div>
-                    ) : null}
                     <div className="space-y-2">
                       <Label>{cur("Hotel por adulto")}</Label>
                       <MoneyField

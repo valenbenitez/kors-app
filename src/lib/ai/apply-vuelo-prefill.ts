@@ -57,7 +57,7 @@ export type ApplyVueloPrefillResult = {
   /**
    * When extract has prices but no destino[0] yet — prices are not written
    * anywhere; seller must select a destino (step 0) then re-upload or enter
-   * prices manually on Costos.
+   * prices manually under Vuelo on Cliente + Viaje.
    */
   skippedPricesWarning: string | null;
 };
@@ -116,7 +116,7 @@ export function applyVueloPrefill(
 
   if (hasPrice && !hasDestino) {
     skippedPricesWarning =
-      "Se detectaron precios de vuelo, pero no hay destino seleccionado. Los precios no se guardaron: seleccioná un destino y volvé a subir la imagen, o cargalos a mano en Costos.";
+      "Se detectaron precios de vuelo, pero no hay destino seleccionado. Los precios no se guardaron: seleccioná un destino y volvé a subir la imagen, o cargalos a mano en Cliente + Viaje (sección Vuelo).";
   }
 
   if (hasPrice && hasDestino) {

@@ -138,6 +138,8 @@ describe("applyVueloPrefill", () => {
     );
 
     expect(result.skippedPricesWarning).toMatch(/no hay destino seleccionado/i);
+    expect(result.skippedPricesWarning).toMatch(/Cliente \+ Viaje/i);
+    expect(result.skippedPricesWarning).not.toMatch(/Costos/i);
     expect(
       setValue.mock.calls.some(([path]) =>
         String(path).includes("vueloIdaAdultoArs"),
