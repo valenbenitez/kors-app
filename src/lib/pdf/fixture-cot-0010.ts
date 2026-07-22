@@ -80,6 +80,10 @@ export function buildCot0010Form(): CotizacionFormInput {
     vueloVueltaAeropuertoSalida: "",
     vueloVueltaAeropuertoLlegada: "",
     itinerario: COT_0010_ITINERARIO,
+    incluyeTexto: "",
+    excluyeTexto: "",
+    heroTags: [],
+    paquetePremium: false,
     destinos: [
       {
         ...emptyDestino("Misiones"),

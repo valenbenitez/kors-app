@@ -76,6 +76,10 @@ Mañana libre / excursión a confirmar.
 
 Día 5 · Dom 15 Mar: Bariloche → Buenos Aires
 Regreso.`,
+    incluyeTexto: "",
+    excluyeTexto: "",
+    heroTags: [],
+    paquetePremium: false,
     destinos: [
       {
         ...emptyDestino("Río Negro"),
@@ -391,6 +395,60 @@ describe("renderPdfHtml — structured flight + hotel fields", () => {
     expect(html).toContain("Pileta climatizada");
     expect(html).toContain("Spa no incluido");
     expect(html).toContain("Check-in desde 15:00");
+  });
+
+  it("prefers seller-edited incluyeTexto / excluyeTexto over auto-build", () => {
+    const form = buildBarilocheLeakageForm();
+    form.incluyeTexto = "Línea custom incluye\nOtra línea incluye";
+    form.excluyeTexto = "Línea custom excluye";
+    form.destinos[0].hotelIncluye = "NO debe aparecer del hotel";
+    form.destinos[0].hotelExcluye = "NO debe aparecer excluye hotel";
+
+    const result = calcularCotizacion(formToFormulaInput(form, rates));
+    const html = renderPdfHtml({
+      cotNumber: "COT-2103",
+      form,
+      result,
+      generatedAt: "2027-01-15",
+    });
+
+    expect(html).toContain("Línea custom incluye");
+    expect(html).toContain("Otra línea incluye");
+    expect(html).toContain("Línea custom excluye");
+    expect(html).not.toContain("NO debe aparecer del hotel");
+    expect(html).not.toContain("NO debe aparecer excluye hotel");
+  });
+
+  it("renders custom form.heroTags and premium on/off", () => {
+    const form = buildBarilocheLeakageForm();
+    form.heroTags = [
+      { emoji: "💧", label: "Custom catarata" },
+      { emoji: "🌳", label: "Custom selva" },
+    ];
+    form.paquetePremium = true;
+
+    const result = calcularCotizacion(formToFormulaInput(form, rates));
+    const withPremium = renderPdfHtml({
+      cotNumber: "COT-2104",
+      form,
+      result,
+      generatedAt: "2027-01-15",
+    });
+
+    expect(withPremium).toContain("Paquete premium");
+    expect(withPremium).toContain("Custom catarata");
+    expect(withPremium).toContain("Custom selva");
+    expect(withPremium).toMatch(/class="tag accent"[^>]*>🎖 Paquete premium/);
+
+    form.paquetePremium = false;
+    const withoutPremium = renderPdfHtml({
+      cotNumber: "COT-2105",
+      form,
+      result,
+      generatedAt: "2027-01-15",
+    });
+    expect(withoutPremium).not.toContain("Paquete premium");
+    expect(withoutPremium).toContain("Custom catarata");
   });
 });
 

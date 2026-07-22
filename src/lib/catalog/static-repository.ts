@@ -9,10 +9,11 @@ import { filterExcursions } from "@/lib/cotizador/catalog";
 import { provinceToCatalogDestino } from "@/lib/cotizador/provinces";
 
 /**
- * Static-first catalog: excursions from bundled JSON via `filterExcursions`;
+ * Static catalog: excursions from bundled JSON via `filterExcursions`;
  * tips / gastro / packing / mapas / clima / hero_tags from `getPdfCopy`.
  *
- * Firestore-backed repo + admin sync is P2 — see docs/catalog.md.
+ * Prefer {@link createCatalogRepository} at the API edge so synced Firestore
+ * data is used when available — see docs/catalog.md.
  */
 export class StaticCatalogRepository implements CatalogRepository {
   async get(tipo: CatalogTipo, query: CatalogQuery): Promise<CatalogResponse> {

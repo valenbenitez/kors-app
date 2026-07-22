@@ -65,7 +65,7 @@ describe("mapHotelCategoria", () => {
 describe("mapHotelExtract", () => {
   test("maps fixture to form fields and computes hotelAdultoNocheArs", () => {
     const llm = hotelLlmSchema.parse(loadFixture("hotel-llm.json"));
-    const { fields, warnings } = mapHotelExtract({
+    const { fields, warnings, _confidence } = mapHotelExtract({
       llm,
       paxAdultos: 2,
     });
@@ -84,18 +84,23 @@ describe("mapHotelExtract", () => {
     expect(fields.hotelEstadiaDetalle).toContain("3 noches");
     expect(fields.moneda).toBe("ARS");
     expect(warnings.some((w) => w.includes("HALF_UP"))).toBe(true);
+    expect(_confidence.hotelNombre).toBe("high");
+    expect(_confidence.hotelCondiciones).toBe("low");
+    expect(_confidence.hotelNoches).toBe("high");
+    expect(_confidence.hotelAdultoNocheArs).toBe("medium");
 
     const response = hotelExtractResponseSchema.parse({
       tipo: "hotel",
       fields,
       warnings,
+      _confidence,
     });
     expect(response.tipo).toBe("hotel");
+    expect(response._confidence.hotelNombre).toBe("high");
     expect(extractQuoteImageResponseSchema.safeParse(response).success).toBe(
       true,
     );
   });
-
   test("maps Spanish estrellas categoría from fixture", () => {
     const llm = hotelLlmSchema.parse(
       loadFixture("hotel-categoria-variantes.json"),

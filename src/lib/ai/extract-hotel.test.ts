@@ -43,6 +43,7 @@ describe("extractHotelFromImage", () => {
     mapHotelExtract.mockReturnValue({
       fields: { hotelNombre: "Hotel Test" },
       warnings: [],
+      _confidence: { hotelNombre: "high" },
     });
   });
 

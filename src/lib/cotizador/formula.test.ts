@@ -203,6 +203,24 @@ describe("calcularCotizacion — Kelly / Iguazú v2.8 golden (spec COT-0007)", (
     expect(result.precioAdultoCliente).toBe(1289);
   });
 
+  it("exposes paso 1–2 intermediates matching spec table (HALF_UP 2dp)", () => {
+    const result = calcularCotizacion(KELLY_IGUAZU_V28_INPUT);
+    const d = result.destinos[0];
+    expect(d).toBeDefined();
+    expect(result.tcArsUsd).toBe(1420);
+    // Spec §5: vuelo ida 103.87, vuelta 104.14, hotel 247.40, exc 305.00
+    expect(d?.vueloIdaAdultoUsd).toBe(103.87);
+    expect(d?.vueloVueltaAdultoUsd).toBe(104.14);
+    expect(d?.hotelAdultoUsd).toBe(247.4);
+    expect(d?.experienciasAdultoUsd).toBe(305);
+    // Spec §5: adj 109.34, 109.62, 255.05, exc 305
+    expect(d?.vueloIdaAdultoAdj).toBe(109.34);
+    expect(d?.vueloVueltaAdultoAdj).toBe(109.62);
+    expect(d?.hotelAdultoAdj).toBe(255.05);
+    expect(result.precioAdultoBase).toBe(1224.16);
+    expect(result.precioAdultoFinal).toBe(1288.59);
+  });
+
   it("accepts params override (agency margin) without mutating defaults", () => {
     const withCash = calcularCotizacion(
       { ...KELLY_IGUAZU_V28_INPUT, metodoPago: "efectivo" },

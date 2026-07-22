@@ -37,8 +37,9 @@ Detalle en [`docs/auth-quotes.md`](./auth-quotes.md). Enforcement en API
 ## Catálogos runtime
 
 `GET /api/catalog/{tipo}` sirve excursiones, tips, gastro, packing, mapas,
-clima y hero_tags. MVP es **static-first** (`StaticCatalogRepository`);
-Firestore sync es P2. Detalle: [`docs/catalog.md`](./catalog.md).
+clima y hero_tags. Factory `createCatalogRepository()` elige Firestore
+(post-sync) o static fallback. Sync: `POST /api/admin/sync-catalog`.
+Detalle: [`docs/catalog.md`](./catalog.md).
 
 ## Qué NO hacer
 

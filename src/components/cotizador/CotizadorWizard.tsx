@@ -2,20 +2,29 @@
 
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { Loader2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
   type Resolver,
   useFieldArray,
   useForm,
   useWatch,
 } from "react-hook-form";
+import { FormulaBreakdown } from "@/components/cotizador/FormulaBreakdown";
 import { ImagePrefillUpload } from "@/components/cotizador/ImagePrefillUpload";
 import { CURRENCY_UI, MoneyField } from "@/components/cotizador/MoneyField";
+import { PrefillConfidenceChip } from "@/components/cotizador/PrefillConfidenceChip";
 import { PdfPreview } from "@/components/pdf/PdfPreview";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { excursionesResponseSchema } from "@/lib/catalog/schemas";
+import {
+  confidenceToUiState,
+  type OcrConfidence,
+} from "@/lib/ai/prefill-confidence";
+import {
+  excursionesResponseSchema,
+  heroTagsResponseSchema,
+} from "@/lib/catalog/schemas";
 import { formToFormulaInput } from "@/lib/cotizador/build-input";
 import {
   type CatalogExcursion,
@@ -35,6 +44,13 @@ import {
   fallbackFxRates,
   pickFxRatesMap,
 } from "@/lib/cotizador/rates";
+import {
+  type HeroTag,
+  isPremiumHeroTag,
+  syncPremiumTag,
+  withoutPremiumTags,
+} from "@/lib/pdf/build-hero-tags";
+import { buildIncludesExcludesText } from "@/lib/pdf/build-includes-excludes";
 import { cn } from "@/lib/utils";
 import {
   type CotizacionFormInput,
@@ -87,6 +103,23 @@ const DESTINO_MONEY_FIELDS = [
 function FieldError({ message }: { message?: string }) {
   if (!message) return null;
   return <p className="text-sm text-destructive">{message}</p>;
+}
+
+function PrefillFieldLabel({
+  htmlFor,
+  level,
+  children,
+}: {
+  htmlFor?: string;
+  level: OcrConfidence | undefined;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <Label htmlFor={htmlFor}>{children}</Label>
+      <PrefillConfidenceChip level={level} />
+    </div>
+  );
 }
 
 function money(n: number) {
@@ -147,25 +180,29 @@ export function CotizadorWizard() {
     Record<string, CatalogExcursion[]>
   >({});
   const [excursionsLoading, setExcursionsLoading] = useState(false);
+  /** Catalog presets for Confirmación chips (non-premium). */
+  const [heroTagPresets, setHeroTagPresets] = useState<HeroTag[]>([]);
   // Guard reentrante: garantiza como máximo una petición activa aunque
   // lleguen submits concurrentes (doble click / doble Enter) antes del rerender.
   const isGeneratingRef = useRef(false);
   const isSavingRef = useRef(false);
-  /** Form paths filled by flight image prefill — used for visual highlight. */
-  const [prefilledFlightPaths, setPrefilledFlightPaths] = useState<string[]>(
-    [],
-  );
-  /** Form paths filled by hotel image prefill — used for visual highlight. */
-  const [prefilledHotelPaths, setPrefilledHotelPaths] = useState<string[]>([]);
+  /** OCR confidence by form path for flight image prefill. */
+  const [flightPrefillConfidence, setFlightPrefillConfidence] = useState<
+    Record<string, OcrConfidence>
+  >({});
+  /** OCR confidence by form path for hotel image prefill. */
+  const [hotelPrefillConfidence, setHotelPrefillConfidence] = useState<
+    Record<string, OcrConfidence>
+  >({});
+
+  function prefillLevel(path: string): OcrConfidence | undefined {
+    return flightPrefillConfidence[path] ?? hotelPrefillConfidence[path];
+  }
 
   function prefillClass(path: string): string | undefined {
-    if (
-      !prefilledFlightPaths.includes(path) &&
-      !prefilledHotelPaths.includes(path)
-    ) {
-      return undefined;
-    }
-    return "ring-2 ring-primary/40 bg-primary/5";
+    const level = prefillLevel(path);
+    if (!level) return undefined;
+    return confidenceToUiState(level).fieldClass;
   }
 
   useEffect(() => {
@@ -235,6 +272,9 @@ export function CotizadorWizard() {
   const destinosWatch = useWatch({ control, name: "destinos" }) ?? [];
   const clienteAportaVuelos =
     useWatch({ control, name: "clienteAportaVuelos" }) ?? false;
+  const heroTagsWatch = useWatch({ control, name: "heroTags" }) ?? [];
+  const paquetePremiumWatch =
+    useWatch({ control, name: "paquetePremium" }) ?? false;
 
   // Keep segment flight dates in sync with trip-level dates (PDF reads segment fechas).
   useEffect(() => {
@@ -360,6 +400,115 @@ export function CotizadorWizard() {
     setValue("itinerario", text);
   }
 
+  /** Prefill only when empty — never overwrite seller edits from goNext. */
+  function prefillIncludesExcludesIfEmpty() {
+    const values = getValues();
+    const built = buildIncludesExcludesText(values);
+    if (!values.incluyeTexto.trim()) {
+      setValue("incluyeTexto", built.incluyeTexto);
+    }
+    if (!values.excluyeTexto.trim()) {
+      setValue("excluyeTexto", built.excluyeTexto);
+    }
+  }
+
+  /** Explicit Restablecer — always rebuilds includes from current form. */
+  function refreshIncludes() {
+    const { incluyeTexto } = buildIncludesExcludesText(getValues());
+    setValue("incluyeTexto", incluyeTexto);
+  }
+
+  /** Explicit Restablecer — always rebuilds excludes from current form. */
+  function refreshExcludes() {
+    const { excluyeTexto } = buildIncludesExcludesText(getValues());
+    setValue("excluyeTexto", excluyeTexto);
+  }
+
+  async function fetchHeroTagPresets(destino: string): Promise<HeroTag[]> {
+    const params = new URLSearchParams({ destino });
+    const res = await fetch(`/api/catalog/hero_tags?${params.toString()}`);
+    if (!res.ok) throw new Error(`Catalog HTTP ${res.status}`);
+    const raw: unknown = await res.json();
+    const parsed = heroTagsResponseSchema.safeParse(raw);
+    if (!parsed.success) throw new Error("Invalid hero_tags payload");
+    return withoutPremiumTags(parsed.data.items);
+  }
+
+  /** Prefill hero tags when empty — AC4 same pattern as includes/excludes. */
+  async function prefillHeroTagsIfEmpty() {
+    const primary =
+      getValues("destinos")[0]?.destino ??
+      getValues("destinosSeleccionados")[0];
+    if (!primary) return;
+    try {
+      const presets = await fetchHeroTagPresets(primary);
+      setHeroTagPresets(presets);
+      if (getValues("heroTags").length > 0) return;
+      setValue(
+        "heroTags",
+        syncPremiumTag(presets, getValues("paquetePremium")),
+      );
+    } catch {
+      setHeroTagPresets([]);
+    }
+  }
+
+  /** Explicit Restablecer — reload presets + apply premium checkbox. */
+  async function refreshHeroTags() {
+    const primary =
+      getValues("destinos")[0]?.destino ??
+      getValues("destinosSeleccionados")[0];
+    if (!primary) return;
+    try {
+      const presets = await fetchHeroTagPresets(primary);
+      setHeroTagPresets(presets);
+      setValue(
+        "heroTags",
+        syncPremiumTag(presets, getValues("paquetePremium")),
+      );
+    } catch {
+      setServerError("No se pudieron cargar los tags del destino.");
+    }
+  }
+
+  function tagKey(tag: HeroTag): string {
+    return `${tag.emoji}\0${tag.label}`;
+  }
+
+  function addHeroTag(tag: HeroTag) {
+    const current = getValues("heroTags");
+    if (current.some((t) => tagKey(t) === tagKey(tag))) return;
+    if (isPremiumHeroTag(tag)) {
+      setValue("paquetePremium", true);
+      setValue("heroTags", syncPremiumTag(current, true));
+      return;
+    }
+    setValue(
+      "heroTags",
+      syncPremiumTag(
+        [...withoutPremiumTags(current), tag],
+        getValues("paquetePremium"),
+      ),
+    );
+  }
+
+  function removeHeroTag(tag: HeroTag) {
+    if (isPremiumHeroTag(tag)) {
+      setValue("paquetePremium", false);
+      setValue("heroTags", withoutPremiumTags(getValues("heroTags")));
+      return;
+    }
+    setValue(
+      "heroTags",
+      getValues("heroTags").filter((t) => tagKey(t) !== tagKey(tag)),
+    );
+  }
+
+  function setPaquetePremium(checked: boolean) {
+    setValue("paquetePremium", checked);
+    setValue("heroTags", syncPremiumTag(getValues("heroTags"), checked));
+  }
+
   async function goNext() {
     setServerError(null);
     setDownloadSuccess(null);
@@ -392,6 +541,8 @@ export function CotizadorWizard() {
         return;
       }
       refreshItinerary();
+      prefillIncludesExcludesIfEmpty();
+      await prefillHeroTagsIfEmpty();
       try {
         const result = calcularCotizacion(
           formToFormulaInput(getValues(), rates),
@@ -633,7 +784,12 @@ export function CotizadorWizard() {
                 </select>
               </div>
               <div className="flex min-w-0 flex-col space-y-2">
-                <Label htmlFor="fechaIda">Fecha ida</Label>
+                <PrefillFieldLabel
+                  htmlFor="fechaIda"
+                  level={prefillLevel("fechaIda")}
+                >
+                  Fecha ida
+                </PrefillFieldLabel>
                 <Input
                   id="fechaIda"
                   type="date"
@@ -643,7 +799,12 @@ export function CotizadorWizard() {
                 <FieldError message={errors.fechaIda?.message} />
               </div>
               <div className="flex min-w-0 flex-col space-y-2">
-                <Label htmlFor="fechaVuelta">Fecha vuelta</Label>
+                <PrefillFieldLabel
+                  htmlFor="fechaVuelta"
+                  level={prefillLevel("fechaVuelta")}
+                >
+                  Fecha vuelta
+                </PrefillFieldLabel>
                 <Input
                   id="fechaVuelta"
                   type="date"
@@ -738,7 +899,12 @@ export function CotizadorWizard() {
             {!clienteAportaVuelos ? (
               <>
                 <div className="space-y-2">
-                  <Label htmlFor="aerolinea">Aerolínea (opcional)</Label>
+                  <PrefillFieldLabel
+                    htmlFor="aerolinea"
+                    level={prefillLevel("aerolinea")}
+                  >
+                    Aerolínea (opcional)
+                  </PrefillFieldLabel>
                   <Input
                     id="aerolinea"
                     className={prefillClass("aerolinea")}
@@ -750,7 +916,9 @@ export function CotizadorWizard() {
                   tipo="vuelo"
                   setValue={setValue}
                   getValues={getValues}
-                  onPrefill={setPrefilledFlightPaths}
+                  onPrefill={({ confidenceByPath }) =>
+                    setFlightPrefillConfidence(confidenceByPath)
+                  }
                 />
 
                 <div className="space-y-4 rounded-2xl border border-border p-4">
@@ -778,7 +946,12 @@ export function CotizadorWizard() {
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     <div className="flex min-w-0 flex-col space-y-2">
-                      <Label htmlFor="vueloIdaHoraSalida">Hora salida</Label>
+                      <PrefillFieldLabel
+                        htmlFor="vueloIdaHoraSalida"
+                        level={prefillLevel("vueloIdaHoraSalida")}
+                      >
+                        Hora salida
+                      </PrefillFieldLabel>
                       <Input
                         id="vueloIdaHoraSalida"
                         type="time"
@@ -787,7 +960,12 @@ export function CotizadorWizard() {
                       />
                     </div>
                     <div className="flex min-w-0 flex-col space-y-2">
-                      <Label htmlFor="vueloIdaHoraLlegada">Hora llegada</Label>
+                      <PrefillFieldLabel
+                        htmlFor="vueloIdaHoraLlegada"
+                        level={prefillLevel("vueloIdaHoraLlegada")}
+                      >
+                        Hora llegada
+                      </PrefillFieldLabel>
                       <Input
                         id="vueloIdaHoraLlegada"
                         type="time"
@@ -796,9 +974,12 @@ export function CotizadorWizard() {
                       />
                     </div>
                     <div className="flex min-w-0 flex-col space-y-2">
-                      <Label htmlFor="vueloIdaNumero">
+                      <PrefillFieldLabel
+                        htmlFor="vueloIdaNumero"
+                        level={prefillLevel("vueloIdaNumero")}
+                      >
                         Número de vuelo ida
-                      </Label>
+                      </PrefillFieldLabel>
                       <Input
                         id="vueloIdaNumero"
                         placeholder="ej. 3150"
@@ -807,9 +988,12 @@ export function CotizadorWizard() {
                       />
                     </div>
                     <div className="flex min-w-0 flex-col space-y-2">
-                      <Label htmlFor="vueloIdaAeropuertoSalida">
+                      <PrefillFieldLabel
+                        htmlFor="vueloIdaAeropuertoSalida"
+                        level={prefillLevel("vueloIdaAeropuertoSalida")}
+                      >
                         Aeropuerto salida ida (IATA)
-                      </Label>
+                      </PrefillFieldLabel>
                       <Input
                         id="vueloIdaAeropuertoSalida"
                         placeholder="EZE"
@@ -822,9 +1006,12 @@ export function CotizadorWizard() {
                       />
                     </div>
                     <div className="flex min-w-0 flex-col space-y-2">
-                      <Label htmlFor="vueloIdaAeropuertoLlegada">
+                      <PrefillFieldLabel
+                        htmlFor="vueloIdaAeropuertoLlegada"
+                        level={prefillLevel("vueloIdaAeropuertoLlegada")}
+                      >
                         Aeropuerto llegada ida (IATA)
-                      </Label>
+                      </PrefillFieldLabel>
                       <Input
                         id="vueloIdaAeropuertoLlegada"
                         placeholder="IGR"
@@ -844,9 +1031,12 @@ export function CotizadorWizard() {
                   ) : null}
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-2">
-                      <Label htmlFor="vueloIdaAdultoArs">
+                      <PrefillFieldLabel
+                        htmlFor="vueloIdaAdultoArs"
+                        level={prefillLevel("destinos.0.vueloIdaAdultoArs")}
+                      >
                         {flightCur("Vuelo ida adulto")}
-                      </Label>
+                      </PrefillFieldLabel>
                       <MoneyField
                         id="vueloIdaAdultoArs"
                         currency={flightMoneda}
@@ -860,9 +1050,12 @@ export function CotizadorWizard() {
                     </div>
                     {hasMenoresStep0 ? (
                       <div className="space-y-2">
-                        <Label htmlFor="vueloIdaMenorArs">
+                        <PrefillFieldLabel
+                          htmlFor="vueloIdaMenorArs"
+                          level={prefillLevel("destinos.0.vueloIdaMenorArs")}
+                        >
                           {flightCur("Vuelo ida menor")}
-                        </Label>
+                        </PrefillFieldLabel>
                         <MoneyField
                           id="vueloIdaMenorArs"
                           currency={flightMoneda}
@@ -886,7 +1079,12 @@ export function CotizadorWizard() {
                   </h3>
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     <div className="flex min-w-0 flex-col space-y-2">
-                      <Label htmlFor="vueloVueltaHoraSalida">Hora salida</Label>
+                      <PrefillFieldLabel
+                        htmlFor="vueloVueltaHoraSalida"
+                        level={prefillLevel("vueloVueltaHoraSalida")}
+                      >
+                        Hora salida
+                      </PrefillFieldLabel>
                       <Input
                         id="vueloVueltaHoraSalida"
                         type="time"
@@ -895,9 +1093,12 @@ export function CotizadorWizard() {
                       />
                     </div>
                     <div className="flex min-w-0 flex-col space-y-2">
-                      <Label htmlFor="vueloVueltaHoraLlegada">
+                      <PrefillFieldLabel
+                        htmlFor="vueloVueltaHoraLlegada"
+                        level={prefillLevel("vueloVueltaHoraLlegada")}
+                      >
                         Hora llegada
-                      </Label>
+                      </PrefillFieldLabel>
                       <Input
                         id="vueloVueltaHoraLlegada"
                         type="time"
@@ -906,9 +1107,12 @@ export function CotizadorWizard() {
                       />
                     </div>
                     <div className="flex min-w-0 flex-col space-y-2">
-                      <Label htmlFor="vueloVueltaNumero">
+                      <PrefillFieldLabel
+                        htmlFor="vueloVueltaNumero"
+                        level={prefillLevel("vueloVueltaNumero")}
+                      >
                         Número de vuelo vuelta
-                      </Label>
+                      </PrefillFieldLabel>
                       <Input
                         id="vueloVueltaNumero"
                         placeholder="ej. 3151"
@@ -917,9 +1121,12 @@ export function CotizadorWizard() {
                       />
                     </div>
                     <div className="flex min-w-0 flex-col space-y-2">
-                      <Label htmlFor="vueloVueltaAeropuertoSalida">
+                      <PrefillFieldLabel
+                        htmlFor="vueloVueltaAeropuertoSalida"
+                        level={prefillLevel("vueloVueltaAeropuertoSalida")}
+                      >
                         Aeropuerto salida vuelta (IATA)
-                      </Label>
+                      </PrefillFieldLabel>
                       <Input
                         id="vueloVueltaAeropuertoSalida"
                         placeholder="IGR"
@@ -932,9 +1139,12 @@ export function CotizadorWizard() {
                       />
                     </div>
                     <div className="flex min-w-0 flex-col space-y-2">
-                      <Label htmlFor="vueloVueltaAeropuertoLlegada">
+                      <PrefillFieldLabel
+                        htmlFor="vueloVueltaAeropuertoLlegada"
+                        level={prefillLevel("vueloVueltaAeropuertoLlegada")}
+                      >
                         Aeropuerto llegada vuelta (IATA)
-                      </Label>
+                      </PrefillFieldLabel>
                       <Input
                         id="vueloVueltaAeropuertoLlegada"
                         placeholder="EZE"
@@ -954,9 +1164,12 @@ export function CotizadorWizard() {
                   ) : null}
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-2">
-                      <Label htmlFor="vueloVueltaAdultoArs">
+                      <PrefillFieldLabel
+                        htmlFor="vueloVueltaAdultoArs"
+                        level={prefillLevel("destinos.0.vueloVueltaAdultoArs")}
+                      >
                         {flightCur("Vuelo vuelta adulto")}
-                      </Label>
+                      </PrefillFieldLabel>
                       <MoneyField
                         id="vueloVueltaAdultoArs"
                         currency={flightMoneda}
@@ -972,9 +1185,12 @@ export function CotizadorWizard() {
                     </div>
                     {hasMenoresStep0 ? (
                       <div className="space-y-2">
-                        <Label htmlFor="vueloVueltaMenorArs">
+                        <PrefillFieldLabel
+                          htmlFor="vueloVueltaMenorArs"
+                          level={prefillLevel("destinos.0.vueloVueltaMenorArs")}
+                        >
                           {flightCur("Vuelo vuelta menor")}
-                        </Label>
+                        </PrefillFieldLabel>
                         <MoneyField
                           id="vueloVueltaMenorArs"
                           currency={flightMoneda}
@@ -1079,21 +1295,38 @@ export function CotizadorWizard() {
 
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-2">
-                      <Label htmlFor={`hotelNoches-${index}`}>Noches</Label>
+                      <PrefillFieldLabel
+                        htmlFor={`hotelNoches-${index}`}
+                        level={prefillLevel(`destinos.${index}.hotelNoches`)}
+                      >
+                        Noches
+                      </PrefillFieldLabel>
                       <Input
                         id={`hotelNoches-${index}`}
                         type="number"
                         min={0}
                         step={1}
+                        className={prefillClass(
+                          `destinos.${index}.hotelNoches`,
+                        )}
                         {...register(`destinos.${index}.hotelNoches`, {
                           valueAsNumber: true,
                         })}
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>{cur("Hotel adulto / noche")}</Label>
+                      <PrefillFieldLabel
+                        level={prefillLevel(
+                          `destinos.${index}.hotelAdultoNocheArs`,
+                        )}
+                      >
+                        {cur("Hotel adulto / noche")}
+                      </PrefillFieldLabel>
                       <MoneyField
                         currency={moneda}
+                        className={prefillClass(
+                          `destinos.${index}.hotelAdultoNocheArs`,
+                        )}
                         value={destinosWatch[index]?.hotelAdultoNocheArs ?? 0}
                         onValueChange={(v) =>
                           setValue(`destinos.${index}.hotelAdultoNocheArs`, v)
@@ -1119,11 +1352,17 @@ export function CotizadorWizard() {
                         paxAdultos={Number(paxAdultos)}
                         setValue={setValue}
                         getValues={getValues}
-                        onPrefill={setPrefilledHotelPaths}
+                        onPrefill={({ confidenceByPath }) =>
+                          setHotelPrefillConfidence(confidenceByPath)
+                        }
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>Nombre hotel</Label>
+                      <PrefillFieldLabel
+                        level={prefillLevel(`destinos.${index}.hotelNombre`)}
+                      >
+                        Nombre hotel
+                      </PrefillFieldLabel>
                       <Input
                         className={prefillClass(
                           `destinos.${index}.hotelNombre`,
@@ -1132,7 +1371,11 @@ export function CotizadorWizard() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>Categoría</Label>
+                      <PrefillFieldLabel
+                        level={prefillLevel(`destinos.${index}.hotelCategoria`)}
+                      >
+                        Categoría
+                      </PrefillFieldLabel>
                       <select
                         className={cn(
                           "h-9 w-full rounded-4xl border border-border bg-background px-3 text-sm",
@@ -1149,7 +1392,11 @@ export function CotizadorWizard() {
                       </select>
                     </div>
                     <div className="space-y-2">
-                      <Label>Régimen</Label>
+                      <PrefillFieldLabel
+                        level={prefillLevel(`destinos.${index}.hotelRegimen`)}
+                      >
+                        Régimen
+                      </PrefillFieldLabel>
                       <Input
                         className={prefillClass(
                           `destinos.${index}.hotelRegimen`,
@@ -1158,7 +1405,11 @@ export function CotizadorWizard() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>Ubicación</Label>
+                      <PrefillFieldLabel
+                        level={prefillLevel(`destinos.${index}.hotelUbicacion`)}
+                      >
+                        Ubicación
+                      </PrefillFieldLabel>
                       <Input
                         className={prefillClass(
                           `destinos.${index}.hotelUbicacion`,
@@ -1167,7 +1418,13 @@ export function CotizadorWizard() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>Tipo habitación</Label>
+                      <PrefillFieldLabel
+                        level={prefillLevel(
+                          `destinos.${index}.hotelHabitacion`,
+                        )}
+                      >
+                        Tipo habitación
+                      </PrefillFieldLabel>
                       <Input
                         className={prefillClass(
                           `destinos.${index}.hotelHabitacion`,
@@ -1176,9 +1433,12 @@ export function CotizadorWizard() {
                       />
                     </div>
                     <div className="space-y-2 sm:col-span-2">
-                      <Label htmlFor={`hotelIncluye-${index}`}>
+                      <PrefillFieldLabel
+                        htmlFor={`hotelIncluye-${index}`}
+                        level={prefillLevel(`destinos.${index}.hotelIncluye`)}
+                      >
                         Hotel incluye (opcional)
-                      </Label>
+                      </PrefillFieldLabel>
                       <textarea
                         id={`hotelIncluye-${index}`}
                         rows={2}
@@ -1191,9 +1451,12 @@ export function CotizadorWizard() {
                       />
                     </div>
                     <div className="space-y-2 sm:col-span-2">
-                      <Label htmlFor={`hotelExcluye-${index}`}>
+                      <PrefillFieldLabel
+                        htmlFor={`hotelExcluye-${index}`}
+                        level={prefillLevel(`destinos.${index}.hotelExcluye`)}
+                      >
                         Hotel excluye (opcional)
-                      </Label>
+                      </PrefillFieldLabel>
                       <textarea
                         id={`hotelExcluye-${index}`}
                         rows={2}
@@ -1206,9 +1469,14 @@ export function CotizadorWizard() {
                       />
                     </div>
                     <div className="space-y-2 sm:col-span-2">
-                      <Label htmlFor={`hotelCondiciones-${index}`}>
+                      <PrefillFieldLabel
+                        htmlFor={`hotelCondiciones-${index}`}
+                        level={prefillLevel(
+                          `destinos.${index}.hotelCondiciones`,
+                        )}
+                      >
                         Condiciones del hotel (opcional)
-                      </Label>
+                      </PrefillFieldLabel>
                       <textarea
                         id={`hotelCondiciones-${index}`}
                         rows={2}
@@ -1366,6 +1634,135 @@ export function CotizadorWizard() {
               {preview.precioMenorCliente > 0 ? (
                 <p>Por menor: {money(preview.precioMenorCliente)}</p>
               ) : null}
+            </div>
+
+            <FormulaBreakdown
+              result={preview}
+              metodoPago={getValues("metodoPago")}
+            />
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label>Tags del hero (PDF)</Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => void refreshHeroTags()}
+                >
+                  Restablecer
+                </Button>
+              </div>
+
+              <label className="flex cursor-pointer items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="size-4 rounded border-border"
+                  checked={paquetePremiumWatch}
+                  onChange={(e) => setPaquetePremium(e.target.checked)}
+                />
+                Marcar como paquete premium
+              </label>
+
+              <div className="flex flex-wrap gap-2">
+                {heroTagsWatch.map((tag) => (
+                  <button
+                    key={tagKey(tag)}
+                    type="button"
+                    onClick={() => removeHeroTag(tag)}
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition ${
+                      tag.accent || isPremiumHeroTag(tag)
+                        ? "border-accent bg-accent/20 text-foreground"
+                        : "border-primary bg-primary text-primary-foreground"
+                    }`}
+                    title="Quitar tag"
+                  >
+                    <span>
+                      {tag.emoji} {tag.label}
+                    </span>
+                    <span aria-hidden className="opacity-70">
+                      ×
+                    </span>
+                  </button>
+                ))}
+                {heroTagsWatch.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Sin tags. Elegí un preset o restablecé.
+                  </p>
+                ) : null}
+              </div>
+
+              {heroTagPresets.length > 0 ? (
+                <div className="space-y-1.5">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Presets del destino
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {heroTagPresets.map((preset) => {
+                      const selected = heroTagsWatch.some(
+                        (t) => tagKey(t) === tagKey(preset),
+                      );
+                      return (
+                        <button
+                          key={tagKey(preset)}
+                          type="button"
+                          disabled={selected}
+                          onClick={() => addHeroTag(preset)}
+                          className={`rounded-full border px-3 py-1.5 text-sm transition ${
+                            selected
+                              ? "cursor-default border-border bg-muted text-muted-foreground opacity-60"
+                              : "border-border hover:bg-muted"
+                          }`}
+                        >
+                          {preset.emoji} {preset.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="incluyeTexto">¿Qué incluye? (editable)</Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={refreshIncludes}
+                >
+                  Restablecer
+                </Button>
+              </div>
+              <textarea
+                id="incluyeTexto"
+                rows={6}
+                className="w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm"
+                {...register("incluyeTexto")}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="excluyeTexto">
+                  ¿Qué no incluye? (editable)
+                </Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={refreshExcludes}
+                >
+                  Restablecer
+                </Button>
+              </div>
+              <textarea
+                id="excluyeTexto"
+                rows={6}
+                className="w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm"
+                {...register("excluyeTexto")}
+              />
             </div>
 
             <div className="space-y-2">

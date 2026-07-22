@@ -4,7 +4,6 @@ const getSession = vi.fn();
 const buildQuotePdf = vi.fn();
 const allocateCotNumber = vi.fn();
 const createTripQuote = vi.fn();
-const computePremiumTag = vi.fn();
 const safeParse = vi.fn();
 
 vi.mock("@/lib/auth/session", () => ({
@@ -21,10 +20,6 @@ vi.mock("@/lib/firebase/counters/cotizaciones", () => ({
 
 vi.mock("@/lib/firebase/trip-quotes/repository", () => ({
   createTripQuote: (...args: unknown[]) => createTripQuote(...args),
-}));
-
-vi.mock("@/lib/cotizador/premium", () => ({
-  computePremiumTag: (...args: unknown[]) => computePremiumTag(...args),
 }));
 
 vi.mock("@/lib/cotizador/formula", () => ({
@@ -53,7 +48,11 @@ function jsonRequest(body: unknown = {}): Request {
   });
 }
 
-const formBody = { clienteNombre: "Ana", perfil: "Pareja" };
+const formBody = {
+  clienteNombre: "Ana",
+  perfil: "Pareja",
+  paquetePremium: false,
+};
 const formulaResult = {
   precioFinalCliente: 100,
   subtotalUsd: 70,
@@ -73,7 +72,6 @@ function mockHappyPath() {
     result: formulaResult,
     generatedAt: "2026-07-21",
   });
-  computePremiumTag.mockReturnValue(false);
   createTripQuote.mockResolvedValue("doc-id-1");
 }
 

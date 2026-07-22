@@ -1,4 +1,9 @@
 import type { UseFormGetValues, UseFormSetValue } from "react-hook-form";
+import {
+  type FieldConfidenceMap,
+  type OcrConfidence,
+  resolveFieldConfidence,
+} from "@/lib/ai/prefill-confidence";
 import type { VueloExtractFields } from "@/lib/ai/schemas";
 import type { CotizacionFormInput } from "@/lib/validations/cotizacion";
 
@@ -54,6 +59,8 @@ export type ApplyVueloPrefillResult = {
   filledPaths: string[];
   /** Spanish labels for UI feedback. */
   filledLabels: string[];
+  /** Confidence keyed by form path. */
+  confidenceByPath: Record<string, OcrConfidence>;
   /**
    * When extract has prices but no destino[0] yet — prices are not written
    * anywhere; seller must select a destino (step 0) then re-upload or enter
@@ -75,17 +82,6 @@ function isPositiveNumber(value: unknown): boolean {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
 
-function setStringField(
-  setValue: UseFormSetValue<CotizacionFormInput>,
-  path: keyof CotizacionFormInput & string,
-  value: string,
-  filled: string[],
-): void {
-  if (!value) return;
-  setValue(path, value, { shouldDirty: true, shouldValidate: false });
-  filled.push(path);
-}
-
 /**
  * Applies flight extract fields to the cotización form.
  * Does not touch client fields (nombre, WhatsApp, perfil, etc.).
@@ -98,15 +94,32 @@ export function applyVueloPrefill(
   fields: VueloExtractFields,
   setValue: UseFormSetValue<CotizacionFormInput>,
   getValues: UseFormGetValues<CotizacionFormInput>,
+  confidence?: FieldConfidenceMap,
 ): ApplyVueloPrefillResult {
   const filledPaths: string[] = [];
+  const confidenceByPath: Record<string, OcrConfidence> = {};
   const skippedFilledLabels: string[] = [];
+
+  function recordPath(path: string, fieldKey: string): void {
+    filledPaths.push(path);
+    confidenceByPath[path] = resolveFieldConfidence(confidence, fieldKey);
+  }
 
   function skipLabel(path: string): void {
     const label = VUELO_PREFILL_LABELS[path] ?? path;
     if (!skippedFilledLabels.includes(label)) {
       skippedFilledLabels.push(label);
     }
+  }
+
+  function setStringField(
+    path: keyof CotizacionFormInput & string,
+    value: string,
+    confidenceKey: string,
+  ): void {
+    if (!value) return;
+    setValue(path, value, { shouldDirty: true, shouldValidate: false });
+    recordPath(path, confidenceKey);
   }
 
   for (const key of TRIP_STRING_KEYS) {
@@ -116,7 +129,7 @@ export function applyVueloPrefill(
       skipLabel(key);
       continue;
     }
-    setStringField(setValue, key, value, filledPaths);
+    setStringField(key, value, key);
   }
 
   // Trip-level travel dates from segment dates when present
@@ -124,7 +137,7 @@ export function applyVueloPrefill(
     if (isNonEmptyString(getValues("fechaIda"))) {
       skipLabel("fechaIda");
     } else {
-      setStringField(setValue, "fechaIda", fields.vueloIdaFecha, filledPaths);
+      setStringField("fechaIda", fields.vueloIdaFecha, "vueloIdaFecha");
     }
   }
   if (fields.vueloVueltaFecha) {
@@ -132,10 +145,9 @@ export function applyVueloPrefill(
       skipLabel("fechaVuelta");
     } else {
       setStringField(
-        setValue,
         "fechaVuelta",
         fields.vueloVueltaFecha,
-        filledPaths,
+        "vueloVueltaFecha",
       );
     }
   }
@@ -174,7 +186,7 @@ export function applyVueloPrefill(
         continue;
       }
       setValue(path, value, { shouldDirty: true, shouldValidate: false });
-      filledPaths.push(path);
+      recordPath(path, key);
     }
 
     // Skip moneda when seller already has flight price context on destinos.0.
@@ -186,7 +198,7 @@ export function applyVueloPrefill(
           shouldDirty: true,
           shouldValidate: false,
         });
-        filledPaths.push("destinos.0.moneda");
+        recordPath("destinos.0.moneda", "moneda");
       }
     }
   }
@@ -198,6 +210,7 @@ export function applyVueloPrefill(
   return {
     filledPaths,
     filledLabels,
+    confidenceByPath,
     skippedPricesWarning,
     skippedFilledLabels,
   };

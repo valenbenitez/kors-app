@@ -71,7 +71,11 @@ describe("applyHotelPrefill", () => {
     };
 
     const setValue = mockSetValue(values);
-    const result = applyHotelPrefill(baseFields(), setValue as never, 0);
+    const result = applyHotelPrefill(baseFields(), setValue as never, 0, {
+      hotelNombre: "high",
+      hotelAdultoNocheArs: "medium",
+      hotelNoches: "high",
+    });
 
     expect(values.aerolinea).toBe("Aerolíneas Argentinas");
     expect(values.vueloIdaNumero).toBe("AR3150");
@@ -95,6 +99,10 @@ describe("applyHotelPrefill", () => {
     expect(result.filledLabels).toContain(HOTEL_PREFILL_LABELS.hotelNombre);
     expect(result.filledLabels).toContain(
       HOTEL_PREFILL_LABELS.hotelAdultoNocheArs,
+    );
+    expect(result.confidenceByPath["destinos.0.hotelNombre"]).toBe("high");
+    expect(result.confidenceByPath["destinos.0.hotelAdultoNocheArs"]).toBe(
+      "medium",
     );
     expect(
       setValue.mock.calls.every(([path]) =>

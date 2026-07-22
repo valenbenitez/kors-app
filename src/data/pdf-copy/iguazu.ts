@@ -7,8 +7,8 @@ import type { PdfDestinationCopy } from "@/data/pdf-copy/types";
  */
 export const iguazuPdfCopy: PdfDestinationCopy = {
   locationLabel: "Puerto Iguazú, Misiones · Argentina",
+  // Premium chip is owned by form.paquetePremium — not baked into presets.
   defaultTags: [
-    { emoji: "🎖", label: "Paquete premium", accent: true },
     { emoji: "👨‍👩‍👧‍👦", label: "Familia" },
     { emoji: "💧", label: "Cataratas UNESCO" },
     { emoji: "🌳", label: "Hotel de selva" },

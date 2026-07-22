@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { buildQuotePdf } from "@/lib/cotizador/build-quote-pdf";
 import { FormulaError } from "@/lib/cotizador/formula";
-import { computePremiumTag } from "@/lib/cotizador/premium";
 import {
   buildDriveStoragePath,
   createDriveClient,
@@ -152,7 +151,7 @@ export async function handleCotizacionesPost(
     const cotNumber = await allocate();
     const built = await buildPdf(parsed.data, cotNumber);
     const storagePath = buildDriveStoragePath(cotNumber);
-    const premiumTag = computePremiumTag(parsed.data, built.result);
+    const premiumTag = parsed.data.paquetePremium;
 
     let docId: string;
     const savedAt = new Date().toISOString();

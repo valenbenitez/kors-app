@@ -16,10 +16,16 @@ import {
 import {
   type ExtractTipo,
   extractQuoteImageResponseSchema,
+  type OcrConfidence,
 } from "@/lib/ai/schemas";
 import type { CotizacionFormInput } from "@/lib/validations/cotizacion";
 
 const MAX_MB = MAX_IMAGE_BYTES / (1024 * 1024);
+
+export type PrefillCallbackPayload = {
+  filledPaths: string[];
+  confidenceByPath: Record<string, OcrConfidence>;
+};
 
 export type ImagePrefillUploadProps = {
   tipo: ExtractTipo;
@@ -34,8 +40,8 @@ export type ImagePrefillUploadProps = {
    * Destino index to prefill when `tipo="hotel"`. Ignored for vuelo.
    */
   destinoIndex?: number;
-  /** Called after a successful prefill with form paths that were set. */
-  onPrefill?: (filledPaths: string[]) => void;
+  /** Called after a successful prefill (or cleared on new upload). */
+  onPrefill?: (payload: PrefillCallbackPayload) => void;
   className?: string;
 };
 
@@ -104,7 +110,7 @@ export function ImagePrefillUpload({
     setError(null);
     setFilledLabels([]);
     setWarnings([]);
-    onPrefill?.([]);
+    onPrefill?.({ filledPaths: [], confidenceByPath: {} });
 
     const files = Array.from(fileList);
     if (files.length === 0) return;
@@ -198,6 +204,7 @@ export function ImagePrefillUpload({
           parsed.data.fields,
           setValue,
           getValues,
+          parsed.data._confidence,
         );
         const extraWarnings = [...parsed.data.warnings];
         if (result.skippedPricesWarning) {
@@ -210,7 +217,10 @@ export function ImagePrefillUpload({
         }
         setFilledLabels(result.filledLabels);
         setWarnings(extraWarnings);
-        onPrefill?.(result.filledPaths);
+        onPrefill?.({
+          filledPaths: result.filledPaths,
+          confidenceByPath: result.confidenceByPath,
+        });
         if (result.filledLabels.length === 0 && extraWarnings.length === 0) {
           setError(
             "No se completó ningún campo. Revisá la imagen o cargá los datos a mano.",
@@ -223,11 +233,15 @@ export function ImagePrefillUpload({
         parsed.data.fields,
         setValue,
         destinoIndex as number,
+        parsed.data._confidence,
       );
       const extraWarnings = [...parsed.data.warnings];
       setFilledLabels(result.filledLabels);
       setWarnings(extraWarnings);
-      onPrefill?.(result.filledPaths);
+      onPrefill?.({
+        filledPaths: result.filledPaths,
+        confidenceByPath: result.confidenceByPath,
+      });
       if (result.filledLabels.length === 0 && extraWarnings.length === 0) {
         setError(
           "No se completó ningún campo. Revisá la imagen o cargá los datos a mano.",

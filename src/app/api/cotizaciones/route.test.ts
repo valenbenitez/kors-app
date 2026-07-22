@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 const getSession = vi.fn();
 const safeParse = vi.fn();
-const computePremiumTag = vi.fn();
 
 vi.mock("@/lib/auth/session", () => ({
   getSession: (...args: unknown[]) => getSession(...args),
@@ -18,10 +17,6 @@ vi.mock("@/lib/validations/cotizacion", async (importOriginal) => {
     },
   };
 });
-
-vi.mock("@/lib/cotizador/premium", () => ({
-  computePremiumTag: (...args: unknown[]) => computePremiumTag(...args),
-}));
 
 vi.mock("@/lib/cotizador/formula", () => ({
   FormulaError: class FormulaError extends Error {},
@@ -54,6 +49,7 @@ function listRequest(query = ""): Request {
 const formBody = {
   clienteNombre: "Ana",
   perfil: "Pareja",
+  paquetePremium: false,
 };
 const formulaResult = {
   subtotalUsd: 100,
@@ -203,7 +199,6 @@ describe("GET /api/cotizaciones", () => {
 describe("POST /api/cotizaciones", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    computePremiumTag.mockReturnValue(false);
   });
 
   test("returns 401 when there is no session", async () => {

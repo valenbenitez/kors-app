@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
+import { createCatalogRepository } from "@/lib/catalog/create-repository";
 import type { CatalogRepository } from "@/lib/catalog/repository";
 import {
   catalogResponseByTipo,
@@ -7,10 +8,7 @@ import {
   fechaIdaQuerySchema,
   mesQuerySchema,
 } from "@/lib/catalog/schemas";
-import {
-  CatalogQueryError,
-  StaticCatalogRepository,
-} from "@/lib/catalog/static-repository";
+import { CatalogQueryError } from "@/lib/catalog/static-repository";
 import {
   type CatalogQuery,
   type CatalogTipo,
@@ -68,7 +66,7 @@ export async function handleCatalogGet(
     return NextResponse.json({ error: queryResult.error }, { status: 400 });
   }
 
-  const repository = deps.repository ?? new StaticCatalogRepository();
+  const repository = deps.repository ?? (await createCatalogRepository());
 
   try {
     const payload = await repository.get(tipo, queryResult.query);

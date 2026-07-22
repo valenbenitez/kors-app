@@ -1,4 +1,9 @@
 import type { UseFormSetValue } from "react-hook-form";
+import {
+  type FieldConfidenceMap,
+  type OcrConfidence,
+  resolveFieldConfidence,
+} from "@/lib/ai/prefill-confidence";
 import type { HotelExtractFields } from "@/lib/ai/schemas";
 import type { CotizacionFormInput } from "@/lib/validations/cotizacion";
 
@@ -33,6 +38,8 @@ export type ApplyHotelPrefillResult = {
   filledPaths: string[];
   /** Spanish labels for UI feedback. */
   filledLabels: string[];
+  /** Confidence keyed by form path (e.g. destinos.0.hotelNombre). */
+  confidenceByPath: Record<string, OcrConfidence>;
 };
 
 function labelFor(fieldKey: string): string {
@@ -47,19 +54,26 @@ export function applyHotelPrefill(
   fields: HotelExtractFields,
   setValue: UseFormSetValue<CotizacionFormInput>,
   destinoIndex: number,
+  confidence?: FieldConfidenceMap,
 ): ApplyHotelPrefillResult {
   if (!Number.isInteger(destinoIndex) || destinoIndex < 0) {
-    return { filledPaths: [], filledLabels: [] };
+    return { filledPaths: [], filledLabels: [], confidenceByPath: {} };
   }
 
   const filledPaths: string[] = [];
+  const confidenceByPath: Record<string, OcrConfidence> = {};
+
+  function recordPath(path: string, fieldKey: string): void {
+    filledPaths.push(path);
+    confidenceByPath[path] = resolveFieldConfidence(confidence, fieldKey);
+  }
 
   for (const key of HOTEL_STRING_KEYS) {
     const value = fields[key];
     if (typeof value === "string" && value.length > 0) {
       const path = `destinos.${destinoIndex}.${key}` as const;
       setValue(path, value, { shouldDirty: true, shouldValidate: false });
-      filledPaths.push(path);
+      recordPath(path, key);
     }
   }
 
@@ -75,7 +89,7 @@ export function applyHotelPrefill(
       shouldDirty: true,
       shouldValidate: false,
     });
-    filledPaths.push(path);
+    recordPath(path, "hotelNoches");
   }
 
   if (
@@ -88,13 +102,13 @@ export function applyHotelPrefill(
       shouldDirty: true,
       shouldValidate: false,
     });
-    filledPaths.push(path);
+    recordPath(path, "hotelAdultoNocheArs");
   }
 
   if (fields.moneda) {
     const path = `destinos.${destinoIndex}.moneda` as const;
     setValue(path, fields.moneda, { shouldDirty: true, shouldValidate: false });
-    filledPaths.push(path);
+    recordPath(path, "moneda");
   }
 
   const filledLabels = filledPaths.map((path) => {
@@ -102,5 +116,5 @@ export function applyHotelPrefill(
     return labelFor(fieldKey);
   });
 
-  return { filledPaths, filledLabels };
+  return { filledPaths, filledLabels, confidenceByPath };
 }

@@ -5,8 +5,9 @@ import type {
 } from "@/lib/catalog/types";
 
 /**
- * Catalog read port. MVP uses {@link StaticCatalogRepository}; a Firestore
- * implementation lands with P2 sync (no seed in this PR).
+ * Catalog read port.
+ * Implementations: {@link StaticCatalogRepository}, {@link FirestoreCatalogRepository}.
+ * Factory: {@link createCatalogRepository}.
  */
 export interface CatalogRepository {
   get(tipo: CatalogTipo, query: CatalogQuery): Promise<CatalogResponse>;

@@ -1,8 +1,20 @@
 import { z } from "zod";
+import {
+  fieldConfidenceMapSchema,
+  ocrConfidenceSchema,
+} from "@/lib/ai/prefill-confidence";
 import { HOTEL_CATEGORIAS, MONEDAS } from "@/lib/validations/cotizacion";
 
 export const EXTRACT_TIPOS = ["hotel", "vuelo"] as const;
 export type ExtractTipo = (typeof EXTRACT_TIPOS)[number];
+
+export {
+  type FieldConfidenceMap,
+  fieldConfidenceMapSchema,
+  OCR_CONFIDENCE_LEVELS,
+  type OcrConfidence,
+  ocrConfidenceSchema,
+} from "@/lib/ai/prefill-confidence";
 
 /** Empty string when the model omits a free-text field (e.g. Nova-lite). */
 const llmString = (description: string) =>
@@ -11,6 +23,49 @@ const llmString = (description: string) =>
 /** Null when the model omits a nullable number. */
 const llmNullableNumber = (description: string) =>
   z.number().nullable().default(null).describe(description);
+
+const optionalConfidence = ocrConfidenceSchema.optional();
+
+/** Per-field OCR confidence on raw LLM hotel keys. */
+export const hotelLlmConfidenceSchema = z
+  .object({
+    name: optionalConfidence,
+    starsRaw: optionalConfidence,
+    totalPrice: optionalConfidence,
+    currency: optionalConfidence,
+    ubicacion: optionalConfidence,
+    stayDetail: optionalConfidence,
+    roomType: optionalConfidence,
+    regimen: optionalConfidence,
+    includes: optionalConfidence,
+    excludes: optionalConfidence,
+    conditions: optionalConfidence,
+  })
+  .default({});
+
+/** Per-field OCR confidence on raw LLM flight keys. */
+export const vueloLlmConfidenceSchema = z
+  .object({
+    airline: optionalConfidence,
+    idaFecha: optionalConfidence,
+    idaHoraSalida: optionalConfidence,
+    idaHoraLlegada: optionalConfidence,
+    idaNumero: optionalConfidence,
+    idaAeropuertoSalida: optionalConfidence,
+    idaAeropuertoLlegada: optionalConfidence,
+    vueltaFecha: optionalConfidence,
+    vueltaHoraSalida: optionalConfidence,
+    vueltaHoraLlegada: optionalConfidence,
+    vueltaNumero: optionalConfidence,
+    vueltaAeropuertoSalida: optionalConfidence,
+    vueltaAeropuertoLlegada: optionalConfidence,
+    precioIdaAdulto: optionalConfidence,
+    precioIdaMenor: optionalConfidence,
+    precioVueltaAdulto: optionalConfidence,
+    precioVueltaMenor: optionalConfidence,
+    currency: optionalConfidence,
+  })
+  .default({});
 
 /** Raw LLM hotel extraction — free-form stars / prices before mapping. */
 export const hotelLlmSchema = z.object({
@@ -47,6 +102,9 @@ export const hotelLlmSchema = z.object({
     .array(z.string())
     .default([])
     .describe("Ambiguities or low-confidence notes for the seller"),
+  _confidence: hotelLlmConfidenceSchema.describe(
+    "Per-field OCR confidence (high|medium|low) for each extracted value you filled. Omit keys for empty fields.",
+  ),
 });
 
 export type HotelLlmExtract = z.infer<typeof hotelLlmSchema>;
@@ -105,10 +163,12 @@ export const vueloLlmSchema = z.object({
     .array(z.string())
     .default([])
     .describe("Ambiguities or low-confidence notes for the seller"),
+  _confidence: vueloLlmConfidenceSchema.describe(
+    "Per-field OCR confidence (high|medium|low) for each extracted value you filled. Omit keys for empty fields.",
+  ),
 });
 
 export type VueloLlmExtract = z.infer<typeof vueloLlmSchema>;
-
 /** Prefill fields for a hotel destino (subset of DestinoFormInput). */
 export const hotelFieldsSchema = z.object({
   hotelNombre: z.string(),
@@ -163,14 +223,17 @@ export const hotelExtractResponseSchema = z.object({
   tipo: z.literal("hotel"),
   fields: hotelFieldsSchema,
   warnings: z.array(z.string()),
+  /** Form-field-keyed confidence (hotelNombre, hotelNoches, …). */
+  _confidence: fieldConfidenceMapSchema,
 });
 
 export const vueloExtractResponseSchema = z.object({
   tipo: z.literal("vuelo"),
   fields: vueloFieldsSchema,
   warnings: z.array(z.string()),
+  /** Form-field-keyed confidence (aerolinea, vueloIdaHoraSalida, …). */
+  _confidence: fieldConfidenceMapSchema,
 });
-
 export const extractQuoteImageResponseSchema = z.discriminatedUnion("tipo", [
   hotelExtractResponseSchema,
   vueloExtractResponseSchema,

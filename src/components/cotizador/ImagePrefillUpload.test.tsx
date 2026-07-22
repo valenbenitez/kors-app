@@ -97,6 +97,19 @@ describe("ImagePrefillUpload — hotel", () => {
           moneda: "ARS",
         },
         warnings: [],
+        _confidence: {
+          hotelNombre: "high",
+          hotelCategoria: "medium",
+          hotelUbicacion: "high",
+          hotelHabitacion: "medium",
+          hotelRegimen: "high",
+          hotelIncluye: "medium",
+          hotelExcluye: "medium",
+          hotelCondiciones: "low",
+          hotelNoches: "high",
+          hotelAdultoNocheArs: "low",
+          moneda: "high",
+        },
       }),
     } as unknown as Response);
 
@@ -140,6 +153,18 @@ describe("ImagePrefillUpload — hotel", () => {
     expect(body.getAll("image")).toHaveLength(1);
 
     await waitFor(() => expect(onPrefill).toHaveBeenCalled());
+    expect(onPrefill).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filledPaths: expect.arrayContaining([
+          "destinos.1.hotelNombre",
+          "destinos.1.hotelAdultoNocheArs",
+        ]),
+        confidenceByPath: expect.objectContaining({
+          "destinos.1.hotelNombre": "high",
+          "destinos.1.hotelAdultoNocheArs": "low",
+        }),
+      }),
+    );
     const paths = setValue.mock.calls.map(([path]) => path);
     expect(paths).toContain("destinos.1.hotelNombre");
     expect(paths).toContain("destinos.1.hotelAdultoNocheArs");

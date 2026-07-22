@@ -164,4 +164,63 @@ describe("cotizacionFormSchema — flight + hotel prefill fields", () => {
     expect(d.hotelExcluye).toBe("");
     expect(d.hotelCondiciones).toBe("");
   });
+
+  it("defaults incluyeTexto / excluyeTexto to empty string", () => {
+    expect(defaultCotizacionValues.incluyeTexto).toBe("");
+    expect(defaultCotizacionValues.excluyeTexto).toBe("");
+    const parsed = cotizacionFormSchema.safeParse(validPayload());
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    expect(parsed.data.incluyeTexto).toBe("");
+    expect(parsed.data.excluyeTexto).toBe("");
+  });
+
+  it("fills missing incluyeTexto / excluyeTexto (Firestore back-compat)", () => {
+    const { incluyeTexto: _a, excluyeTexto: _b, ...rest } = validPayload();
+    const parsed = cotizacionFormSchema.safeParse(rest);
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    expect(parsed.data.incluyeTexto).toBe("");
+    expect(parsed.data.excluyeTexto).toBe("");
+  });
+
+  it("accepts seller-edited incluyeTexto / excluyeTexto", () => {
+    const parsed = cotizacionFormSchema.safeParse(
+      validPayload({
+        incluyeTexto: "Vuelos\nHotel",
+        excluyeTexto: "Almuerzos",
+      }),
+    );
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    expect(parsed.data.incluyeTexto).toBe("Vuelos\nHotel");
+    expect(parsed.data.excluyeTexto).toBe("Almuerzos");
+  });
+
+  it("defaults heroTags / paquetePremium and accepts edits", () => {
+    expect(defaultCotizacionValues.heroTags).toEqual([]);
+    expect(defaultCotizacionValues.paquetePremium).toBe(false);
+
+    const missing = cotizacionFormSchema.safeParse(
+      (() => {
+        const { heroTags: _a, paquetePremium: _b, ...rest } = validPayload();
+        return rest;
+      })(),
+    );
+    expect(missing.success).toBe(true);
+    if (!missing.success) return;
+    expect(missing.data.heroTags).toEqual([]);
+    expect(missing.data.paquetePremium).toBe(false);
+
+    const edited = cotizacionFormSchema.safeParse(
+      validPayload({
+        heroTags: [{ emoji: "💧", label: "Cataratas", accent: false }],
+        paquetePremium: true,
+      }),
+    );
+    expect(edited.success).toBe(true);
+    if (!edited.success) return;
+    expect(edited.data.heroTags).toHaveLength(1);
+    expect(edited.data.paquetePremium).toBe(true);
+  });
 });

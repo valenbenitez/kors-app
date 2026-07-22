@@ -50,6 +50,7 @@ describe("extractVueloFromImage", () => {
     mapVueloExtract.mockReturnValue({
       fields: { aerolinea: "AR", vueloIdaNumero: "AR3150" },
       warnings: [],
+      _confidence: { aerolinea: "high" },
     });
   });
 

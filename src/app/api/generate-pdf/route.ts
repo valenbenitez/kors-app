@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { buildQuotePdf } from "@/lib/cotizador/build-quote-pdf";
 import { FormulaError } from "@/lib/cotizador/formula";
-import { computePremiumTag } from "@/lib/cotizador/premium";
 import { allocateCotNumber } from "@/lib/firebase/counters/cotizaciones";
 import { createTripQuote } from "@/lib/firebase/trip-quotes/repository";
 import { ROUNDING_RULE_CEILING_V1 } from "@/lib/firebase/trip-quotes/types";
@@ -49,7 +48,7 @@ export async function POST(request: Request) {
     const cotNumber = await allocateCotNumber();
     const built = await buildQuotePdf(parsed.data, cotNumber);
     const filename = clientPdfFilename(cotNumber);
-    const premiumTag = computePremiumTag(parsed.data, built.result);
+    const premiumTag = parsed.data.paquetePremium;
 
     try {
       await createTripQuote({

@@ -58,7 +58,7 @@ describe("normalizeFlightTime", () => {
 describe("mapVueloExtract", () => {
   test("maps fixture to vueloIda* / vueloVuelta* form fields", () => {
     const llm = vueloLlmSchema.parse(loadFixture("vuelo-llm.json"));
-    const { fields, warnings } = mapVueloExtract({ llm });
+    const { fields, warnings, _confidence } = mapVueloExtract({ llm });
 
     expect(fields.aerolinea).toBe("Aerolíneas Argentinas");
     expect(fields.vueloIdaFecha).toBe("2026-08-10");
@@ -75,12 +75,17 @@ describe("mapVueloExtract", () => {
     expect(fields.vueloIdaMenorArs).toBeUndefined();
     expect(fields.moneda).toBe("ARS");
     expect(warnings).toEqual([]);
+    expect(_confidence.aerolinea).toBe("high");
+    expect(_confidence.vueloIdaAeropuertoLlegada).toBe("medium");
+    expect(_confidence.vueloIdaAdultoArs).toBe("medium");
 
     const response = vueloExtractResponseSchema.parse({
       tipo: "vuelo",
       fields,
       warnings,
+      _confidence,
     });
+    expect(response._confidence.aerolinea).toBe("high");
     expect(extractQuoteImageResponseSchema.safeParse(response).success).toBe(
       true,
     );

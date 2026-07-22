@@ -28,7 +28,12 @@ Other rules:
 - starsRaw should preserve what you see (e.g. "4 stars", "4*", "4 estrellas").
 - includes / excludes / conditions as free text; join list items with newlines.
 - stayDetail should summarize nights/guests/check-in if visible.
-- warnings: short notes for a travel agent (Spanish OK), including partial-failure notes when applicable.`;
+- warnings: short notes for a travel agent (Spanish OK), including partial-failure notes when applicable.
+- _confidence: for EVERY non-empty field you extract, set high|medium|low under _confidence using the same key (name, starsRaw, totalPrice, currency, ubicacion, stayDetail, roomType, regimen, includes, excludes, conditions).
+  - high = clearly legible and unambiguous.
+  - medium = readable but blurry, cropped, or slightly ambiguous.
+  - low = guessed from partial/unclear text — seller should review.
+  Omit keys for empty/null fields.`;
 
 export type HotelImageInput = {
   imageBytes: Uint8Array;
@@ -100,5 +105,6 @@ export async function extractHotelFromImage(
     tipo: "hotel",
     fields: mapped.fields,
     warnings: mapped.warnings,
+    _confidence: mapped._confidence,
   };
 }

@@ -32,7 +32,12 @@ Other rules:
 - Airports: prefer IATA codes (EZE, IGR). If only a city name is visible, put the name and leave mapping to the server.
 - Prices optional — use null when not visible.
 - Never invent flight numbers, airports, or prices.
-- warnings: short notes for a travel agent (Spanish OK), including partial-failure notes when applicable.`;
+- warnings: short notes for a travel agent (Spanish OK), including partial-failure notes when applicable.
+- _confidence: for EVERY non-empty field you extract, set high|medium|low under _confidence using the same key (airline, idaFecha, idaHoraSalida, idaHoraLlegada, idaNumero, idaAeropuertoSalida, idaAeropuertoLlegada, vuelta*, precioIdaAdulto, precioIdaMenor, precioVueltaAdulto, precioVueltaMenor, currency).
+  - high = clearly legible and unambiguous.
+  - medium = readable but blurry, cropped, or slightly ambiguous.
+  - low = guessed from partial/unclear text — seller should review.
+  Omit keys for empty/null fields.`;
 }
 
 export type VueloImageInput = {
@@ -102,5 +107,6 @@ export async function extractVueloFromImage(
     tipo: "vuelo",
     fields: mapped.fields,
     warnings: mapped.warnings,
+    _confidence: mapped._confidence,
   };
 }

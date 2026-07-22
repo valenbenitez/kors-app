@@ -115,6 +115,22 @@ export const cotizacionFormSchema = z
     vueloVueltaAeropuertoSalida: optionalText,
     vueloVueltaAeropuertoLlegada: optionalText,
     itinerario: z.string(),
+    /** Seller-editable PDF includes (Confirmación). Prefill from auto-build. */
+    incluyeTexto: optionalText,
+    /** Seller-editable PDF excludes (Confirmación). Prefill from auto-build. */
+    excluyeTexto: optionalText,
+    /** Seller-editable PDF hero tags (Confirmación). Prefill from catalog presets. */
+    heroTags: z
+      .array(
+        z.object({
+          emoji: z.string(),
+          label: z.string(),
+          accent: z.boolean().optional(),
+        }),
+      )
+      .default([]),
+    /** Checkbox — adds/removes the premium accent tag in PDF + Firestore flag. */
+    paquetePremium: z.boolean().default(false),
     destinos: z.array(destinoFormSchema).min(1),
   })
   .superRefine((data, ctx) => {
@@ -208,5 +224,9 @@ export const defaultCotizacionValues: CotizacionFormInput = {
   vueloVueltaAeropuertoSalida: "",
   vueloVueltaAeropuertoLlegada: "",
   itinerario: "",
+  incluyeTexto: "",
+  excluyeTexto: "",
+  heroTags: [],
+  paquetePremium: false,
   destinos: [emptyDestino("Misiones")],
 };

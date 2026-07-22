@@ -12,5 +12,18 @@
   "includes": "WiFi\nPileta\nEstacionamiento",
   "excludes": "Spa\nExcursiones",
   "conditions": "No reembolsable\nCancelación gratis hasta 48h antes",
-  "warnings": ["Precio total parece incluir impuestos"]
+  "warnings": ["Precio total parece incluir impuestos"],
+  "_confidence": {
+    "name": "high",
+    "starsRaw": "high",
+    "totalPrice": "medium",
+    "currency": "high",
+    "ubicacion": "high",
+    "stayDetail": "high",
+    "roomType": "medium",
+    "regimen": "high",
+    "includes": "medium",
+    "excludes": "medium",
+    "conditions": "low"
+  }
 }

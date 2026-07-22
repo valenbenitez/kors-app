@@ -13,12 +13,17 @@ import {
   packingResponseSchema,
   tipsResponseSchema,
 } from "@/lib/catalog/schemas";
+import { StaticCatalogRepository } from "@/lib/catalog/static-repository";
 import { CATALOG_TIPOS } from "@/lib/catalog/types";
 
 const getSession = vi.fn();
 
 vi.mock("@/lib/auth/session", () => ({
   getSession: (...args: unknown[]) => getSession(...args),
+}));
+
+vi.mock("@/lib/catalog/create-repository", () => ({
+  createCatalogRepository: async () => new StaticCatalogRepository(),
 }));
 
 function catalogRequest(tipo: string, query = ""): Request {
@@ -212,5 +217,23 @@ describe("GET /api/catalog/[tipo]", () => {
       "clima",
     );
     expect(res.status).toBe(400);
+  });
+
+  test("uses injected repository (post-sync Firestore path)", async () => {
+    const repository = {
+      get: vi.fn(async () => ({
+        items: [{ emoji: "🧪", title: "Synced", body: "From Firestore" }],
+      })),
+    };
+
+    const res = await handleCatalogGet(
+      catalogRequest("tips", "destino=Misiones"),
+      "tips",
+      { repository },
+    );
+    expect(res.status).toBe(200);
+    const body = tipsResponseSchema.parse(await res.json());
+    expect(body.items[0]?.title).toBe("Synced");
+    expect(repository.get).toHaveBeenCalledOnce();
   });
 });

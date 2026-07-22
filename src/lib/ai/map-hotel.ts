@@ -4,6 +4,11 @@ import {
   TypeMismatchError,
   UnreadableImageError,
 } from "@/lib/ai/errors";
+import {
+  type FieldConfidenceMap,
+  minConfidence,
+  type OcrConfidence,
+} from "@/lib/ai/prefill-confidence";
 import type { HotelExtractFields, HotelLlmExtract } from "@/lib/ai/schemas";
 import {
   type FormMoneda,
@@ -12,6 +17,30 @@ import {
 } from "@/lib/validations/cotizacion";
 
 Decimal.set({ precision: 28, rounding: Decimal.ROUND_HALF_UP });
+
+/** LLM `_confidence` keys → form field keys (and derived fields). */
+const HOTEL_LLM_TO_FORM: Record<string, string> = {
+  name: "hotelNombre",
+  starsRaw: "hotelCategoria",
+  ubicacion: "hotelUbicacion",
+  roomType: "hotelHabitacion",
+  regimen: "hotelRegimen",
+  includes: "hotelIncluye",
+  excludes: "hotelExcluye",
+  conditions: "hotelCondiciones",
+  stayDetail: "hotelEstadiaDetalle",
+  totalPrice: "hotelTotalDetectado",
+  currency: "moneda",
+};
+
+function setConfidence(
+  map: FieldConfidenceMap,
+  fieldKey: string,
+  level: OcrConfidence | undefined,
+): void {
+  if (!level) return;
+  map[fieldKey] = level;
+}
 
 /**
  * Parses nights from stay-detail text (e.g. "3 noches", "1 noche").
@@ -120,6 +149,8 @@ export type MapHotelInput = {
 export type MapHotelResult = {
   fields: HotelExtractFields;
   warnings: string[];
+  /** Form-field-keyed OCR confidence for the API `_confidence` payload. */
+  _confidence: FieldConfidenceMap;
 };
 
 /**
@@ -227,5 +258,35 @@ export function mapHotelExtract(input: MapHotelInput): MapHotelResult {
     ...(resolvedMoneda ? { moneda: resolvedMoneda } : {}),
   };
 
-  return { fields, warnings };
+  const llmConf = llm._confidence ?? {};
+  const _confidence: FieldConfidenceMap = {};
+
+  for (const [llmKey, formKey] of Object.entries(HOTEL_LLM_TO_FORM)) {
+    const level = llmConf[llmKey as keyof typeof llmConf];
+    if (!level) continue;
+    // Only attach confidence when the mapped form value is meaningfully filled.
+    const value = fields[formKey as keyof HotelExtractFields];
+    const filled =
+      (typeof value === "string" && value.length > 0) ||
+      (typeof value === "number" && value > 0);
+    if (filled) {
+      setConfidence(_confidence, formKey, level);
+    }
+  }
+
+  if (hotelNoches > 0) {
+    setConfidence(_confidence, "hotelNoches", llmConf.stayDetail);
+  }
+  if (hotelAdultoNocheArs > 0) {
+    setConfidence(
+      _confidence,
+      "hotelAdultoNocheArs",
+      minConfidence(llmConf.totalPrice, llmConf.stayDetail) ?? "medium",
+    );
+  }
+  if (resolvedMoneda && llm.currency.trim()) {
+    setConfidence(_confidence, "moneda", llmConf.currency);
+  }
+
+  return { fields, warnings, _confidence };
 }

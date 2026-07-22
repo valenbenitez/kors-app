@@ -78,6 +78,7 @@ describe("applyVueloPrefill", () => {
       baseFields(),
       setValue as never,
       getValues as never,
+      { aerolinea: "high", vueloIdaFecha: "medium" },
     );
 
     expect(values.clienteNombre).toBe("Ana");
@@ -89,6 +90,8 @@ describe("applyVueloPrefill", () => {
     expect(values.vueloIdaAeropuertoSalida).toBe("EZE");
     expect(result.filledLabels).toContain(VUELO_PREFILL_LABELS.aerolinea);
     expect(result.filledLabels).toContain(VUELO_PREFILL_LABELS.fechaIda);
+    expect(result.confidenceByPath.aerolinea).toBe("high");
+    expect(result.confidenceByPath.fechaIda).toBe("medium");
     expect(result.skippedPricesWarning).toBeNull();
   });
 

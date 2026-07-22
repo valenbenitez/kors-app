@@ -8,7 +8,7 @@ import {
 } from "@/lib/ai/schemas";
 
 describe("extract response schema contract", () => {
-  test("accepts discriminated hotel response shape", () => {
+  test("accepts discriminated hotel response shape with _confidence", () => {
     const parsed = extractQuoteImageResponseSchema.safeParse({
       tipo: "hotel",
       fields: {
@@ -27,8 +27,40 @@ describe("extract response schema contract", () => {
         moneda: "ARS",
       },
       warnings: ["ok"],
+      _confidence: {
+        hotelNombre: "high",
+        hotelAdultoNocheArs: "low",
+      },
     });
     expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    expect(parsed.data._confidence.hotelNombre).toBe("high");
+    expect(parsed.data._confidence.hotelAdultoNocheArs).toBe("low");
+  });
+
+  test("defaults missing _confidence to empty object", () => {
+    const parsed = extractQuoteImageResponseSchema.safeParse({
+      tipo: "vuelo",
+      fields: {
+        aerolinea: "AR",
+        vueloIdaFecha: "2026-08-10",
+        vueloIdaHoraSalida: "20:58",
+        vueloIdaHoraLlegada: "22:52",
+        vueloIdaNumero: "3150",
+        vueloIdaAeropuertoSalida: "EZE",
+        vueloIdaAeropuertoLlegada: "IGR",
+        vueloVueltaFecha: "",
+        vueloVueltaHoraSalida: "",
+        vueloVueltaHoraLlegada: "",
+        vueloVueltaNumero: "",
+        vueloVueltaAeropuertoSalida: "",
+        vueloVueltaAeropuertoLlegada: "",
+      },
+      warnings: [],
+    });
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    expect(parsed.data._confidence).toEqual({});
   });
 
   test("accepts discriminated vuelo response shape", () => {

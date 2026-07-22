@@ -3,12 +3,47 @@ import {
   TypeMismatchError,
   UnreadableImageError,
 } from "@/lib/ai/errors";
+import type {
+  FieldConfidenceMap,
+  OcrConfidence,
+} from "@/lib/ai/prefill-confidence";
 import type { VueloExtractFields, VueloLlmExtract } from "@/lib/ai/schemas";
 import type { FormMoneda } from "@/lib/validations/cotizacion";
 import { MONEDAS } from "@/lib/validations/cotizacion";
 
 const IATA_RE = /^[A-Za-z]{3}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** LLM `_confidence` keys → form field keys. */
+const VUELO_LLM_TO_FORM: Record<string, keyof VueloExtractFields> = {
+  airline: "aerolinea",
+  idaFecha: "vueloIdaFecha",
+  idaHoraSalida: "vueloIdaHoraSalida",
+  idaHoraLlegada: "vueloIdaHoraLlegada",
+  idaNumero: "vueloIdaNumero",
+  idaAeropuertoSalida: "vueloIdaAeropuertoSalida",
+  idaAeropuertoLlegada: "vueloIdaAeropuertoLlegada",
+  vueltaFecha: "vueloVueltaFecha",
+  vueltaHoraSalida: "vueloVueltaHoraSalida",
+  vueltaHoraLlegada: "vueloVueltaHoraLlegada",
+  vueltaNumero: "vueloVueltaNumero",
+  vueltaAeropuertoSalida: "vueloVueltaAeropuertoSalida",
+  vueltaAeropuertoLlegada: "vueloVueltaAeropuertoLlegada",
+  precioIdaAdulto: "vueloIdaAdultoArs",
+  precioIdaMenor: "vueloIdaMenorArs",
+  precioVueltaAdulto: "vueloVueltaAdultoArs",
+  precioVueltaMenor: "vueloVueltaMenorArs",
+  currency: "moneda",
+};
+
+function setConfidence(
+  map: FieldConfidenceMap,
+  fieldKey: string,
+  level: OcrConfidence | undefined,
+): void {
+  if (!level) return;
+  map[fieldKey] = level;
+}
 
 /**
  * Normalizes airport codes to uppercase IATA (3 letters).
@@ -96,6 +131,8 @@ export type MapVueloInput = {
 export type MapVueloResult = {
   fields: VueloExtractFields;
   warnings: string[];
+  /** Form-field-keyed OCR confidence for the API `_confidence` payload. */
+  _confidence: FieldConfidenceMap;
 };
 
 /**
@@ -178,5 +215,20 @@ export function mapVueloExtract(input: MapVueloInput): MapVueloResult {
     );
   }
 
-  return { fields, warnings };
+  const llmConf = llm._confidence ?? {};
+  const _confidence: FieldConfidenceMap = {};
+
+  for (const [llmKey, formKey] of Object.entries(VUELO_LLM_TO_FORM)) {
+    const level = llmConf[llmKey as keyof typeof llmConf];
+    if (!level) continue;
+    const value = fields[formKey];
+    const filled =
+      (typeof value === "string" && value.length > 0) ||
+      (typeof value === "number" && Number.isFinite(value));
+    if (filled) {
+      setConfidence(_confidence, formKey, level);
+    }
+  }
+
+  return { fields, warnings, _confidence };
 }

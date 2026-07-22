@@ -107,17 +107,20 @@ function matchesNameQuery(exc: CatalogExcursion, query: string): boolean {
 }
 
 /**
- * Filter catalog by destination + active + validity for departure date.
+ * Filter an excursion list by destination + active + validity for departure date.
  * Optional `query` further narrows by name (nombre / nombreLimpio).
  * Empty query returns the same list as without query.
  */
-export function filterExcursions(options: {
-  destino: string;
-  fechaIda: string;
-  query?: string;
-}): CatalogExcursion[] {
+export function filterExcursionList(
+  items: readonly CatalogExcursion[],
+  options: {
+    destino: string;
+    fechaIda: string;
+    query?: string;
+  },
+): CatalogExcursion[] {
   const { destino, fechaIda, query = "" } = options;
-  return catalog.filter(
+  return items.filter(
     (exc) =>
       exc.activa &&
       exc.destino === destino &&
@@ -125,4 +128,16 @@ export function filterExcursions(options: {
       inValidityWindow(fechaIda, exc.validezDesde, exc.validezHasta) &&
       matchesNameQuery(exc, query),
   );
+}
+
+/**
+ * Filter the bundled static catalog by destination + active + validity.
+ * For Firestore-backed lists use {@link filterExcursionList}.
+ */
+export function filterExcursions(options: {
+  destino: string;
+  fechaIda: string;
+  query?: string;
+}): CatalogExcursion[] {
+  return filterExcursionList(catalog, options);
 }

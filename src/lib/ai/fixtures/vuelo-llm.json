@@ -19,5 +19,23 @@
   "precioVueltaAdulto": 175000,
   "precioVueltaMenor": null,
   "currency": "ARS",
-  "warnings": []
+  "warnings": [],
+  "_confidence": {
+    "airline": "high",
+    "idaFecha": "high",
+    "idaHoraSalida": "high",
+    "idaHoraLlegada": "high",
+    "idaNumero": "high",
+    "idaAeropuertoSalida": "high",
+    "idaAeropuertoLlegada": "medium",
+    "vueltaFecha": "high",
+    "vueltaHoraSalida": "high",
+    "vueltaHoraLlegada": "high",
+    "vueltaNumero": "high",
+    "vueltaAeropuertoSalida": "high",
+    "vueltaAeropuertoLlegada": "high",
+    "precioIdaAdulto": "medium",
+    "precioVueltaAdulto": "medium",
+    "currency": "high"
+  }
 }

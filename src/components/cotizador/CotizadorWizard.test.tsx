@@ -31,6 +31,19 @@ function catalogExcursionesResponse(items: unknown[] = []): Response {
   } as unknown as Response;
 }
 
+function catalogHeroTagsResponse(
+  items: unknown[] = [
+    { emoji: "👨‍👩‍👧‍👦", label: "Familia" },
+    { emoji: "💧", label: "Cataratas UNESCO" },
+    { emoji: "🌳", label: "Hotel de selva" },
+  ],
+): Response {
+  return {
+    ok: true,
+    json: async () => ({ items }),
+  } as unknown as Response;
+}
+
 /** Shared fetch routing used by most wizard tests. */
 function routeTestFetch(
   input: RequestInfo | URL,
@@ -43,6 +56,9 @@ function routeTestFetch(
   const url = typeof input === "string" ? input : input.url;
   if (url.includes("/api/rates")) {
     return overrides?.rates?.() ?? Promise.resolve(ratesResponse());
+  }
+  if (url.includes("/api/catalog/hero_tags")) {
+    return overrides?.catalog?.() ?? Promise.resolve(catalogHeroTagsResponse());
   }
   if (url.includes("/api/catalog/")) {
     return (
@@ -210,6 +226,125 @@ describe("CotizadorWizard — generación del PDF", () => {
     await goToFinalStep(user);
 
     expect(generatePdfCalls()).toHaveLength(0);
+  });
+
+  it("prefills editable includes/excludes on Confirmación with Restablecer", async () => {
+    const user = userEvent.setup();
+    render(<CotizadorWizard />);
+
+    await goToFinalStep(user);
+
+    const incluye = await screen.findByLabelText("¿Qué incluye? (editable)");
+    const excluye = screen.getByLabelText("¿Qué no incluye? (editable)");
+    expect(incluye).toBeInTheDocument();
+    expect(excluye).toBeInTheDocument();
+    expect((incluye as HTMLTextAreaElement).value.length).toBeGreaterThan(0);
+    expect((excluye as HTMLTextAreaElement).value.length).toBeGreaterThan(0);
+
+    const restablecerButtons = screen.getAllByRole("button", {
+      name: "Restablecer",
+    });
+    expect(restablecerButtons.length).toBeGreaterThanOrEqual(2);
+    const restablecerIncluye = restablecerButtons.find((btn) => {
+      const label = btn.closest("div")?.querySelector("label");
+      return label?.textContent?.includes("incluye");
+    });
+    expect(restablecerIncluye).toBeDefined();
+
+    await user.clear(incluye);
+    await user.type(incluye, "Línea editada por vendedor");
+    expect((incluye as HTMLTextAreaElement).value).toContain(
+      "Línea editada por vendedor",
+    );
+
+    await user.click(restablecerIncluye as HTMLElement);
+    expect((incluye as HTMLTextAreaElement).value).not.toContain(
+      "Línea editada por vendedor",
+    );
+    expect((incluye as HTMLTextAreaElement).value.length).toBeGreaterThan(0);
+  });
+
+  it("prefills hero tag chips from catalog and toggles premium", async () => {
+    const user = userEvent.setup();
+    render(<CotizadorWizard />);
+
+    await goToFinalStep(user);
+
+    expect(await screen.findByText("Tags del hero (PDF)")).toBeInTheDocument();
+    expect(screen.getAllByText(/Cataratas UNESCO/).length).toBeGreaterThan(0);
+
+    const premium = screen.getByRole("checkbox", {
+      name: /Marcar como paquete premium/i,
+    });
+    expect(premium).not.toBeChecked();
+
+    await user.click(premium);
+    expect(premium).toBeChecked();
+    expect(screen.getByText(/Paquete premium/)).toBeInTheDocument();
+
+    await user.click(premium);
+    expect(premium).not.toBeChecked();
+    expect(screen.queryByText(/Paquete premium/)).not.toBeInTheDocument();
+  });
+
+  it("keeps edited includes/excludes when returning to Confirmación; Restablecer overwrites", async () => {
+    const user = userEvent.setup();
+    render(<CotizadorWizard />);
+
+    await goToFinalStep(user);
+
+    const incluye = await screen.findByLabelText("¿Qué incluye? (editable)");
+    const excluye = screen.getByLabelText("¿Qué no incluye? (editable)");
+
+    await user.clear(incluye);
+    await user.type(incluye, "EDIT_INCLUYE_PERSIST");
+    await user.clear(excluye);
+    await user.type(excluye, "EDIT_EXCLUYE_PERSIST");
+
+    await user.click(screen.getByRole("button", { name: "Atrás" }));
+    await screen.findByText("Nombre hotel");
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+
+    const incluyeAgain = await screen.findByLabelText(
+      "¿Qué incluye? (editable)",
+    );
+    const excluyeAgain = screen.getByLabelText("¿Qué no incluye? (editable)");
+    expect((incluyeAgain as HTMLTextAreaElement).value).toContain(
+      "EDIT_INCLUYE_PERSIST",
+    );
+    expect((excluyeAgain as HTMLTextAreaElement).value).toContain(
+      "EDIT_EXCLUYE_PERSIST",
+    );
+
+    const restablecerButtons = screen.getAllByRole("button", {
+      name: "Restablecer",
+    });
+    const restablecerIncluye = restablecerButtons.find((btn) => {
+      const label = btn.closest("div")?.querySelector("label");
+      return label?.textContent?.includes("incluye");
+    });
+    const restablecerExcluye = restablecerButtons.find((btn) => {
+      const label = btn.closest("div")?.querySelector("label");
+      return label?.textContent?.includes("no incluye");
+    });
+    expect(restablecerIncluye).toBeDefined();
+    expect(restablecerExcluye).toBeDefined();
+
+    await user.click(restablecerIncluye as HTMLElement);
+    expect((incluyeAgain as HTMLTextAreaElement).value).not.toContain(
+      "EDIT_INCLUYE_PERSIST",
+    );
+    expect((incluyeAgain as HTMLTextAreaElement).value.length).toBeGreaterThan(
+      0,
+    );
+
+    await user.click(restablecerExcluye as HTMLElement);
+    expect((excluyeAgain as HTMLTextAreaElement).value).not.toContain(
+      "EDIT_EXCLUYE_PERSIST",
+    );
+    expect((excluyeAgain as HTMLTextAreaElement).value.length).toBeGreaterThan(
+      0,
+    );
   });
 
   it("submit nativo en el paso final no llama a /api/generate-pdf", async () => {
@@ -383,6 +518,27 @@ describe("CotizadorWizard — generación del PDF", () => {
     expect(
       screen.getByRole("button", { name: "Ocultar preview" }),
     ).toBeInTheDocument();
+  });
+
+  it("breakdown de fórmula está colapsado y se expande en Confirmación", async () => {
+    const user = userEvent.setup();
+    render(<CotizadorWizard />);
+
+    await goToFinalStep(user);
+
+    const toggle = screen.getByRole("button", { name: "Ver breakdown" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.queryByText(/Paso 9 — Redondeo CEILING/),
+    ).not.toBeInTheDocument();
+
+    await user.click(toggle);
+    expect(
+      screen.getByRole("button", { name: "Ocultar breakdown" }),
+    ).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText(/Paso 1 — ARS → USD/)).toBeInTheDocument();
+    expect(screen.getByText(/Paso 9 — Redondeo CEILING/)).toBeInTheDocument();
+    expect(screen.getByText(/N\/A — MVP/)).toBeInTheDocument();
   });
 
   it("shows live TC when /api/rates succeeds (ignores formulaParams)", async () => {

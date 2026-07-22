@@ -20,7 +20,7 @@ Overrides opcionales (`includes`, `excludes`, `hotelHighlights`, `tags`, `experi
 | Saludo / nombre cliente | A | `form.clienteNombre` |
 | Destino (título) | A | single: `destinos[0]`; multi: nombres unidos con ` + ` |
 | Ubicación (subtítulo) | C | `copy.locationLabel` (multi: join de cada destino) |
-| Tags | C (+ A) | `copy.defaultTags`; “Familia N pax” usa total pax del form |
+| Tags | A (+ C) | Prefer `form.heroTags` (editable chips en Confirmación) + `form.paquetePremium`; si vacío → `copy.defaultTags` (sin premium baked-in) + checkbox. Override fixture: `data.tags` |
 | Precio por persona / total | B | `result.precioAdultoCliente`, `result.precioFinalCliente` |
 | Método de pago + fee | A + B | `form.metodoPago` + `feeMultiplierLabel` |
 | Nº cotización / fechas validez | A + B | `cotNumber`, `generatedAt`, `validUntil` (o +7 días) |
@@ -30,8 +30,8 @@ Overrides opcionales (`includes`, `excludes`, `hotelHighlights`, `tags`, `experi
 | **Vuelos (sección dedicada)** | A | `aerolinea` + `vueloIda*` / `vueloVuelta*`; omitida si todos los costos de vuelo = 0 (§6.7) |
 | Hotel nombre / meta | A | loop de `form.destinos` (multi: un bloque por destino) |
 | Hotel highlights | C + A | `copy.hotelHighlights` + ubicación / `hotelAjusteRazon` del form |
-| ¿Qué incluye? | A + B | vuelos/hotel/excursiones de **todos** los destinos + **equipaje** (§6.8) si hay vuelos |
-| ¿Qué no incluye? | C + A | `copy.excludes` de cada destino + `hotelExcluye` |
+| ¿Qué incluye? | A + B | Prefer `form.incluyeTexto` (editable en Confirmación); si vacío → auto-build (vuelos/hotel/excursiones + equipaje §6.8). Override fixture: `data.includes` |
+| ¿Qué no incluye? | C + A | Prefer `form.excluyeTexto` (editable en Confirmación); si vacío → `copy.excludes` + `hotelExcluye`. Override fixture: `data.excludes` |
 | Itinerario | A | `form.itinerario` |
 | Forma de pago (footer) | A | `paymentFooterLine(metodoPago)` |
 | Disclaimer validez | B | `validUntil` |

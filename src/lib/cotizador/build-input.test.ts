@@ -48,6 +48,10 @@ function minimalForm(
     vueloVueltaAeropuertoSalida: "",
     vueloVueltaAeropuertoLlegada: "",
     itinerario: "Día 1: llegada",
+    incluyeTexto: "",
+    excluyeTexto: "",
+    heroTags: [],
+    paquetePremium: false,
     ...overrides,
   };
 }

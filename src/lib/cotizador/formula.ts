@@ -54,11 +54,30 @@ export type CotizacionInput = {
   tcArsUsd?: number;
 };
 
+/** Per-destino intermediates for formula steps 1–2 (UI breakdown; HALF_UP 2dp). */
 export type DestinoBreakdown = {
   destino: string;
   subtotalUsd: number;
   hotelAdultoArsNet: number;
   hotelMenorArsNet: number;
+  /** Paso 1 — ARS→USD unit amounts (before gross-up, before × pax). */
+  vueloIdaAdultoUsd: number;
+  vueloIdaMenorUsd: number;
+  vueloVueltaAdultoUsd: number;
+  vueloVueltaMenorUsd: number;
+  hotelAdultoUsd: number;
+  hotelMenorUsd: number;
+  /** Sum of excursion netos in USD for one adult (before × pax). */
+  experienciasAdultoUsd: number;
+  /** Sum of excursion netos in USD for one minor (before × pax). */
+  experienciasMenorUsd: number;
+  /** Paso 2 — gross-up unit amounts (excursions unchanged). */
+  vueloIdaAdultoAdj: number;
+  vueloIdaMenorAdj: number;
+  vueloVueltaAdultoAdj: number;
+  vueloVueltaMenorAdj: number;
+  hotelAdultoAdj: number;
+  hotelMenorAdj: number;
 };
 
 export type FormulaResult = {
@@ -69,8 +88,14 @@ export type FormulaResult = {
   precioPaquete: number;
   margenAgenciaUsd: number;
   precioPostFee: number;
+  /** Paso 6 — per-pax base on post-fee, before seller margin (HALF_UP 2dp). */
+  precioAdultoBase: number;
+  precioMenorBase: number;
   precioFinal: number;
   margenVendedorUsd: number;
+  /** Paso 8 — per-pax after seller, before CEILING (HALF_UP 2dp). */
+  precioAdultoFinal: number;
+  precioMenorFinal: number;
   precioFinalCliente: number;
   precioAdultoCliente: number;
   precioMenorCliente: number;
@@ -193,23 +218,20 @@ export function calcularCotizacion(
     );
     const hotelMenorArsNet = stayMenor;
 
-    const vueloIdaAdultoAdj = toUsd(dest.vueloIdaAdultoArs, "ARS", tc).div(
-      flightDivisor,
-    );
-    const vueloVueltaAdultoAdj = toUsd(
-      dest.vueloVueltaAdultoArs,
-      "ARS",
-      tc,
-    ).div(flightDivisor);
-    const vueloIdaMenorAdj = toUsd(dest.vueloIdaMenorArs, "ARS", tc).div(
-      flightDivisor,
-    );
-    const vueloVueltaMenorAdj = toUsd(dest.vueloVueltaMenorArs, "ARS", tc).div(
-      flightDivisor,
-    );
+    const vueloIdaAdultoUsd = toUsd(dest.vueloIdaAdultoArs, "ARS", tc);
+    const vueloVueltaAdultoUsd = toUsd(dest.vueloVueltaAdultoArs, "ARS", tc);
+    const vueloIdaMenorUsd = toUsd(dest.vueloIdaMenorArs, "ARS", tc);
+    const vueloVueltaMenorUsd = toUsd(dest.vueloVueltaMenorArs, "ARS", tc);
+    const hotelAdultoUsd = hotelAdultoArsNet.div(tc);
+    const hotelMenorUsd = hotelMenorArsNet.div(tc);
 
-    const hotelAdultoAdj = hotelAdultoArsNet.div(tc).div(hotelDivisor);
-    const hotelMenorAdj = hotelMenorArsNet.div(tc).div(hotelDivisor);
+    const vueloIdaAdultoAdj = vueloIdaAdultoUsd.div(flightDivisor);
+    const vueloVueltaAdultoAdj = vueloVueltaAdultoUsd.div(flightDivisor);
+    const vueloIdaMenorAdj = vueloIdaMenorUsd.div(flightDivisor);
+    const vueloVueltaMenorAdj = vueloVueltaMenorUsd.div(flightDivisor);
+
+    const hotelAdultoAdj = hotelAdultoUsd.div(hotelDivisor);
+    const hotelMenorAdj = hotelMenorUsd.div(hotelDivisor);
 
     const baseAdulto = vueloIdaAdultoAdj
       .plus(vueloVueltaAdultoAdj)
@@ -218,6 +240,8 @@ export function calcularCotizacion(
       .plus(vueloVueltaMenorAdj)
       .plus(hotelMenorAdj);
 
+    let expAdultoUnit = new Decimal(0);
+    let expMenorUnit = new Decimal(0);
     let expAdultos = new Decimal(0);
     let expMenores = new Decimal(0);
 
@@ -227,6 +251,8 @@ export function calcularCotizacion(
         tc,
         paxMenores,
       );
+      expAdultoUnit = expAdultoUnit.plus(netoAdultoUsd);
+      expMenorUnit = expMenorUnit.plus(netoMenorUsd);
       expAdultos = expAdultos.plus(netoAdultoUsd.times(paxAdultos));
       expMenores = expMenores.plus(netoMenorUsd.times(paxMenores));
     }
@@ -246,6 +272,21 @@ export function calcularCotizacion(
       subtotalUsd: halfUp2(destSubtotal).toNumber(),
       hotelAdultoArsNet: hotelAdultoArsNet.toNumber(),
       hotelMenorArsNet: hotelMenorArsNet.toNumber(),
+      vueloIdaAdultoUsd: halfUp2(vueloIdaAdultoUsd).toNumber(),
+      vueloIdaMenorUsd: halfUp2(vueloIdaMenorUsd).toNumber(),
+      vueloVueltaAdultoUsd: halfUp2(vueloVueltaAdultoUsd).toNumber(),
+      vueloVueltaMenorUsd: halfUp2(vueloVueltaMenorUsd).toNumber(),
+      hotelAdultoUsd: halfUp2(hotelAdultoUsd).toNumber(),
+      hotelMenorUsd: halfUp2(hotelMenorUsd).toNumber(),
+      experienciasAdultoUsd: halfUp2(expAdultoUnit).toNumber(),
+      experienciasMenorUsd:
+        paxMenores > 0 ? halfUp2(expMenorUnit).toNumber() : 0,
+      vueloIdaAdultoAdj: halfUp2(vueloIdaAdultoAdj).toNumber(),
+      vueloIdaMenorAdj: halfUp2(vueloIdaMenorAdj).toNumber(),
+      vueloVueltaAdultoAdj: halfUp2(vueloVueltaAdultoAdj).toNumber(),
+      vueloVueltaMenorAdj: halfUp2(vueloVueltaMenorAdj).toNumber(),
+      hotelAdultoAdj: halfUp2(hotelAdultoAdj).toNumber(),
+      hotelMenorAdj: halfUp2(hotelMenorAdj).toNumber(),
     });
   }
 
@@ -265,20 +306,28 @@ export function calcularCotizacion(
 
   const precioFinalCliente = ceilingInt(precioFinal);
 
+  let precioAdultoBase = 0;
+  let precioMenorBase = 0;
+  let precioAdultoFinal = 0;
+  let precioMenorFinal = 0;
   let precioAdultoCliente = 0;
   let precioMenorCliente = 0;
 
   if (subtotalUsd.gt(0)) {
     const ratioAdulto = subtotalAdultosUsd.div(subtotalUsd);
-    const precioAdultoBase = precioPostFee.times(ratioAdulto).div(paxAdultos);
-    const precioAdultoFinal = precioAdultoBase.div(sellerDivisor);
-    precioAdultoCliente = ceilingInt(precioAdultoFinal);
+    const adultoBase = precioPostFee.times(ratioAdulto).div(paxAdultos);
+    const adultoFinal = adultoBase.div(sellerDivisor);
+    precioAdultoBase = halfUp2(adultoBase).toNumber();
+    precioAdultoFinal = halfUp2(adultoFinal).toNumber();
+    precioAdultoCliente = ceilingInt(adultoFinal);
 
     if (paxMenores > 0) {
       const ratioMenor = subtotalMenoresUsd.div(subtotalUsd);
-      const precioMenorBase = precioPostFee.times(ratioMenor).div(paxMenores);
-      const precioMenorFinal = precioMenorBase.div(sellerDivisor);
-      precioMenorCliente = ceilingInt(precioMenorFinal);
+      const menorBase = precioPostFee.times(ratioMenor).div(paxMenores);
+      const menorFinal = menorBase.div(sellerDivisor);
+      precioMenorBase = halfUp2(menorBase).toNumber();
+      precioMenorFinal = halfUp2(menorFinal).toNumber();
+      precioMenorCliente = ceilingInt(menorFinal);
     }
   }
 
@@ -290,8 +339,12 @@ export function calcularCotizacion(
     precioPaquete: precioPaquete.toNumber(),
     margenAgenciaUsd: margenAgenciaUsd.toNumber(),
     precioPostFee: precioPostFee.toNumber(),
+    precioAdultoBase,
+    precioMenorBase,
     precioFinal: precioFinal.toNumber(),
     margenVendedorUsd: margenVendedorUsd.toNumber(),
+    precioAdultoFinal,
+    precioMenorFinal,
     precioFinalCliente,
     precioAdultoCliente,
     precioMenorCliente,
