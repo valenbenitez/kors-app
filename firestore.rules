@@ -1,7 +1,8 @@
 rules_version = '2';
 
 // Deny all client access by default.
-// Admin SDK bypasses rules; client SDK cannot read/write without Auth (future).
+// Admin SDK bypasses rules; trip-quote read/write is enforced in API routes
+// (see docs/auth-quotes.md). Do not open client rules without mirroring that policy.
 service cloud.firestore {
   match /databases/{database}/documents {
     match /{document=**} {

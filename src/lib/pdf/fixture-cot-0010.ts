@@ -65,6 +65,7 @@ export function buildCot0010Form(): CotizacionFormInput {
     edadesMenores: [6, 7],
     metodoPago: "tarjeta",
     equipaje: "carry-on",
+    clienteAportaVuelos: false,
     aerolinea: "JetSMART",
     vueloIdaFecha: "",
     vueloIdaHoraSalida: "",

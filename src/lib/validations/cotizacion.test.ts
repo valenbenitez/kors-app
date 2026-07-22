@@ -30,6 +30,31 @@ function validPayload(overrides: Record<string, unknown> = {}) {
 }
 
 describe("cotizacionFormSchema — flight + hotel prefill fields", () => {
+  it("defaults clienteAportaVuelos to false", () => {
+    expect(defaultCotizacionValues.clienteAportaVuelos).toBe(false);
+    const parsed = cotizacionFormSchema.safeParse(validPayload());
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    expect(parsed.data.clienteAportaVuelos).toBe(false);
+  });
+
+  it("fills missing clienteAportaVuelos with false (Firestore back-compat)", () => {
+    const { clienteAportaVuelos: _omit, ...rest } = validPayload();
+    const parsed = cotizacionFormSchema.safeParse(rest);
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    expect(parsed.data.clienteAportaVuelos).toBe(false);
+  });
+
+  it("accepts clienteAportaVuelos true", () => {
+    const parsed = cotizacionFormSchema.safeParse(
+      validPayload({ clienteAportaVuelos: true }),
+    );
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    expect(parsed.data.clienteAportaVuelos).toBe(true);
+  });
+
   it("accepts a complete form with empty optional flight/hotel fields", () => {
     const parsed = cotizacionFormSchema.safeParse(validPayload());
     expect(parsed.success).toBe(true);

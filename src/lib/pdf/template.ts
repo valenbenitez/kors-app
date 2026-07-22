@@ -159,7 +159,11 @@ function formatFlightLegLine(
   return parts.join(" · ");
 }
 
+/** PDF copy when the client brings their own flights (no package flight cards). */
+export const CLIENT_PROVIDED_FLIGHTS_COPY = "Vuelos aportados por el cliente";
+
 function packageHasFlights(form: CotizacionFormInput): boolean {
+  if (form.clienteAportaVuelos) return false;
   return form.destinos.some(
     (d) =>
       d.vueloIdaAdultoArs +
@@ -218,6 +222,10 @@ function includesList(form: CotizacionFormInput): string[] {
   const items: string[] = [];
   if (form.destinos.length === 0) return items;
 
+  if (form.clienteAportaVuelos) {
+    items.push(CLIENT_PROVIDED_FLIGHTS_COPY);
+  }
+
   const hasFlights = packageHasFlights(form);
 
   if (hasFlights) {
@@ -267,6 +275,13 @@ function includesList(form: CotizacionFormInput): string[] {
 
 /** Dedicated flights block (spec §6.7) — empty when all flight costs are 0. */
 function flightsSectionHtml(form: CotizacionFormInput): string {
+  if (form.clienteAportaVuelos) {
+    return `<div class="flights-block">
+    <h2 class="section-title">Vuelos</h2>
+    <p class="flights-client-notice">${escapeHtml(CLIENT_PROVIDED_FLIGHTS_COPY)}</p>
+  </div>`;
+  }
+
   if (!packageHasFlights(form)) return "";
 
   const airline = form.aerolinea?.trim() || "Aerolínea a confirmar";
@@ -507,14 +522,7 @@ function experiencesForDestinosHtml(
       if (rows.length === 0) return null;
       return { destino: dest.destino, rows };
     })
-    .filter(
-      (
-        g,
-      ): g is {
-        destino: string;
-        rows: { name: string; detail: string; usd: number }[];
-      } => Boolean(g),
-    );
+    .filter((g): g is NonNullable<typeof g> => Boolean(g));
 
   if (groups.length === 0) {
     return `<p class="muted">Sin excursiones seleccionadas.</p>`;
@@ -834,6 +842,11 @@ export function renderPdfHtml(data: PdfRenderData): string {
     line-height: 1.15;
   }
   .flights-block { margin-top: 12px; }
+  .flights-client-notice {
+    margin: 0;
+    font-size: 11px;
+    color: #2a3348;
+  }
   .flight-cards {
     display: grid;
     grid-template-columns: 1fr 1fr;

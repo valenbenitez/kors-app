@@ -51,6 +51,20 @@ describe("verifySessionToken", () => {
     expect(verifySessionCookie).toHaveBeenCalledWith("valid-cookie", true);
   });
 
+  test("includes admin when custom claim is true", async () => {
+    verifySessionCookie.mockResolvedValue({
+      email: "admin@kors.com",
+      uid: "uid-admin",
+      admin: true,
+    });
+
+    await expect(verifySessionToken("admin-cookie")).resolves.toEqual({
+      email: "admin@kors.com",
+      sub: "uid-admin",
+      admin: true,
+    });
+  });
+
   test("returns null when the cookie is invalid", async () => {
     verifySessionCookie.mockRejectedValue(
       new FirebaseDomainError("verifySessionCookie: invalid"),

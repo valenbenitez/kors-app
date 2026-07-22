@@ -54,6 +54,7 @@ function buildBarilocheLeakageForm(): CotizacionFormInput {
     edadesMenores: [],
     metodoPago: "efectivo",
     equipaje: "valija 23 kg",
+    clienteAportaVuelos: false,
     aerolinea: "Aerolíneas Argentinas",
     vueloIdaFecha: "",
     vueloIdaHoraSalida: "",
@@ -298,6 +299,29 @@ describe("renderPdfHtml — structured flight + hotel fields", () => {
     expect(html).toContain('class="flights-block"');
     expect(html).toContain('class="flight-card"');
     expect(html).toContain("Aerolíneas Argentinas 1620");
+  });
+
+  it("shows client-provided flights notice when clienteAportaVuelos is true", () => {
+    const form = buildBarilocheLeakageForm();
+    form.clienteAportaVuelos = true;
+    // Residual prices must not invent package flight cards/lines.
+    form.destinos[0].vueloIdaAdultoArs = 180_000;
+    form.destinos[0].vueloVueltaAdultoArs = 180_000;
+
+    const result = calcularCotizacion(formToFormulaInput(form, rates));
+    const html = renderPdfHtml({
+      cotNumber: "COT-2105",
+      form,
+      result,
+      generatedAt: "2027-01-15",
+    });
+
+    expect(html).toContain("Vuelos aportados por el cliente");
+    expect(html).toContain('class="flights-block"');
+    expect(html).toContain('class="flights-client-notice"');
+    expect(html).not.toContain('class="flight-card"');
+    expect(html).not.toContain("2 vuelos Aerolíneas Argentinas cabotaje");
+    expect(html).not.toContain("Aerolínea a confirmar");
   });
 
   it("keeps generic flight fallback when segment fields are empty", () => {

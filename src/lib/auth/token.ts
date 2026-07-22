@@ -8,6 +8,8 @@ export const SESSION_MAX_AGE = 60 * 60 * 24 * 7;
 export type SessionPayload = {
   email: string;
   sub: string;
+  /** Firebase custom claim `admin === true` when present on the session cookie. */
+  admin?: boolean;
 };
 
 /**
@@ -32,7 +34,11 @@ export async function verifySessionToken(
       return null;
     }
 
-    return { email, sub: decoded.uid };
+    return {
+      email,
+      sub: decoded.uid,
+      ...(decoded.admin === true ? { admin: true as const } : {}),
+    };
   } catch {
     return null;
   }

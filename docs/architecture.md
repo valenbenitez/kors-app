@@ -28,6 +28,18 @@ usuario → app/page.tsx → components/ → services/api.ts → backend
 Backend:
 controller → service → provider (Firebase/Circle/etc.)
 
+## Auth — cotizaciones (trip quotes)
+
+Lectura de cotizaciones ajenas: sellers solo las propias; admins todas.
+Detalle en [`docs/auth-quotes.md`](./auth-quotes.md). Enforcement en API
+(`src/lib/firebase/trip-quotes/access.ts`); Firestore client rules = deny-all.
+
+## Catálogos runtime
+
+`GET /api/catalog/{tipo}` sirve excursiones, tips, gastro, packing, mapas,
+clima y hero_tags. MVP es **static-first** (`StaticCatalogRepository`);
+Firestore sync es P2. Detalle: [`docs/catalog.md`](./catalog.md).
+
 ## Qué NO hacer
 
 - No usar `console.log()` para debug — usar el logger del proyecto

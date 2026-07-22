@@ -24,6 +24,36 @@ function ratesResponse(
   } as unknown as Response;
 }
 
+function catalogExcursionesResponse(items: unknown[] = []): Response {
+  return {
+    ok: true,
+    json: async () => ({ items }),
+  } as unknown as Response;
+}
+
+/** Shared fetch routing used by most wizard tests. */
+function routeTestFetch(
+  input: RequestInfo | URL,
+  overrides?: {
+    rates?: () => Promise<Response>;
+    catalog?: () => Promise<Response>;
+    other?: (url: string) => Promise<Response> | null;
+  },
+): Promise<Response> {
+  const url = typeof input === "string" ? input : input.url;
+  if (url.includes("/api/rates")) {
+    return overrides?.rates?.() ?? Promise.resolve(ratesResponse());
+  }
+  if (url.includes("/api/catalog/")) {
+    return (
+      overrides?.catalog?.() ?? Promise.resolve(catalogExcursionesResponse())
+    );
+  }
+  const custom = overrides?.other?.(url);
+  if (custom) return custom;
+  return Promise.resolve(pdfResponse());
+}
+
 function pdfResponse(cotNumber = "COT-0042"): Response {
   return {
     ok: true,
@@ -103,6 +133,12 @@ function cotizacionesCalls() {
   );
 }
 
+function catalogCalls() {
+  return fetchMock.mock.calls.filter(
+    ([url]) => typeof url === "string" && url.includes("/api/catalog/"),
+  );
+}
+
 function previewPdfCalls() {
   return fetchMock.mock.calls.filter(
     ([url]) => typeof url === "string" && url.includes("/api/preview-pdf"),
@@ -128,13 +164,7 @@ beforeEach(() => {
   URL.createObjectURL = vi.fn(() => "blob:mock");
   URL.revokeObjectURL = vi.fn();
   vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
-  fetchMock.mockImplementation((input) => {
-    const url = typeof input === "string" ? input : input.url;
-    if (url.includes("/api/rates")) {
-      return Promise.resolve(ratesResponse());
-    }
-    return Promise.resolve(pdfResponse());
-  });
+  fetchMock.mockImplementation((input) => routeTestFetch(input));
 });
 
 afterEach(() => {
@@ -194,16 +224,14 @@ describe("CotizadorWizard — generación del PDF", () => {
   });
 
   it("con formulario válido, click en Guardar cotización llama a /api/cotizaciones", async () => {
-    fetchMock.mockImplementation((input) => {
-      const url = typeof input === "string" ? input : input.url;
-      if (url.includes("/api/rates")) {
-        return Promise.resolve(ratesResponse());
-      }
-      if (url.includes("/api/cotizaciones")) {
-        return Promise.resolve(saveResponse("COT-0007"));
-      }
-      return Promise.resolve(pdfResponse());
-    });
+    fetchMock.mockImplementation((input) =>
+      routeTestFetch(input, {
+        other: (url) =>
+          url.includes("/api/cotizaciones")
+            ? Promise.resolve(saveResponse("COT-0007"))
+            : null,
+      }),
+    );
     const user = userEvent.setup();
     render(<CotizadorWizard />);
 
@@ -242,13 +270,11 @@ describe("CotizadorWizard — generación del PDF", () => {
   });
 
   it("tras descargar el PDF muestra banner de éxito con el número COT", async () => {
-    fetchMock.mockImplementation((input) => {
-      const url = typeof input === "string" ? input : input.url;
-      if (url.includes("/api/rates")) {
-        return Promise.resolve(ratesResponse());
-      }
-      return Promise.resolve(pdfResponse("COT-0042"));
-    });
+    fetchMock.mockImplementation((input) =>
+      routeTestFetch(input, {
+        other: () => Promise.resolve(pdfResponse("COT-0042")),
+      }),
+    );
     const user = userEvent.setup();
     render(<CotizadorWizard />);
 
@@ -262,15 +288,18 @@ describe("CotizadorWizard — generación del PDF", () => {
 
   it("doble click rápido en Generar PDF produce exactamente 1 petición", async () => {
     let resolveFetch: ((response: Response) => void) | undefined;
-    fetchMock.mockImplementation((input) => {
-      const url = typeof input === "string" ? input : input.url;
-      if (url.includes("/api/rates")) {
-        return Promise.resolve(ratesResponse());
-      }
-      return new Promise<Response>((resolve) => {
-        resolveFetch = resolve;
-      });
-    });
+    fetchMock.mockImplementation((input) =>
+      routeTestFetch(input, {
+        other: (url) => {
+          if (url.includes("/api/generate-pdf")) {
+            return new Promise<Response>((resolve) => {
+              resolveFetch = resolve;
+            });
+          }
+          return null;
+        },
+      }),
+    );
     const user = userEvent.setup();
     render(<CotizadorWizard />);
 
@@ -290,17 +319,18 @@ describe("CotizadorWizard — generación del PDF", () => {
 
   it("ante error del server muestra el mensaje y permite reintentar", async () => {
     let generateCount = 0;
-    fetchMock.mockImplementation((input) => {
-      const url = typeof input === "string" ? input : input.url;
-      if (url.includes("/api/rates")) {
-        return Promise.resolve(ratesResponse());
-      }
-      generateCount += 1;
-      if (generateCount === 1) {
-        return Promise.resolve(errorResponse());
-      }
-      return Promise.resolve(pdfResponse());
-    });
+    fetchMock.mockImplementation((input) =>
+      routeTestFetch(input, {
+        other: (url) => {
+          if (!url.includes("/api/generate-pdf")) return null;
+          generateCount += 1;
+          if (generateCount === 1) {
+            return Promise.resolve(errorResponse());
+          }
+          return Promise.resolve(pdfResponse());
+        },
+      }),
+    );
     const user = userEvent.setup();
     render(<CotizadorWizard />);
 
@@ -318,17 +348,21 @@ describe("CotizadorWizard — generación del PDF", () => {
   });
 
   it("toggle Ver preview llama a /api/preview-pdf y muestra el iframe", async () => {
-    fetchMock.mockImplementation((input) => {
-      const url = typeof input === "string" ? input : input.url;
-      if (url.includes("/api/rates")) {
-        return Promise.resolve(ratesResponse());
-      }
-      return Promise.resolve({
-        ok: true,
-        text: async () => "<!DOCTYPE html><html><body>preview</body></html>",
-        headers: { get: () => null },
-      } as unknown as Response);
-    });
+    fetchMock.mockImplementation((input) =>
+      routeTestFetch(input, {
+        other: (url) => {
+          if (url.includes("/api/preview-pdf")) {
+            return Promise.resolve({
+              ok: true,
+              text: async () =>
+                "<!DOCTYPE html><html><body>preview</body></html>",
+              headers: { get: () => null },
+            } as unknown as Response);
+          }
+          return null;
+        },
+      }),
+    );
     const user = userEvent.setup();
     render(<CotizadorWizard />);
 
@@ -352,32 +386,31 @@ describe("CotizadorWizard — generación del PDF", () => {
   });
 
   it("shows live TC when /api/rates succeeds (ignores formulaParams)", async () => {
-    fetchMock.mockImplementation((input) => {
-      const url = typeof input === "string" ? input : input.url;
-      if (url.includes("/api/rates")) {
-        return Promise.resolve(
-          ratesResponse({
-            USD: 1,
-            ARS: 1500,
-            CLP: 950,
-            COP: 4100,
-            PIX: 5.5,
-            PEN: 3.75,
-            formulaParams: {
-              tcArsUsd: 1500,
-              flightTaxPct: 0.05,
-              hotelTaxPct: 0.03,
-              agencyMarginPct: 0.3,
-              cardFeePct: 0.1,
-              beetransferFeePct: 0.03,
-              cashFeePct: 0,
-              sellerMarginPct: 0.05,
-            },
-          }),
-        );
-      }
-      return Promise.resolve(pdfResponse());
-    });
+    fetchMock.mockImplementation((input) =>
+      routeTestFetch(input, {
+        rates: () =>
+          Promise.resolve(
+            ratesResponse({
+              USD: 1,
+              ARS: 1500,
+              CLP: 950,
+              COP: 4100,
+              PIX: 5.5,
+              PEN: 3.75,
+              formulaParams: {
+                tcArsUsd: 1500,
+                flightTaxPct: 0.05,
+                hotelTaxPct: 0.03,
+                agencyMarginPct: 0.3,
+                cardFeePct: 0.1,
+                beetransferFeePct: 0.03,
+                cashFeePct: 0,
+                sellerMarginPct: 0.05,
+              },
+            }),
+          ),
+      }),
+    );
     render(<CotizadorWizard />);
     await waitFor(() => {
       expect(screen.getByText(/TC ARS\/USD 1500/)).toBeInTheDocument();
@@ -387,16 +420,15 @@ describe("CotizadorWizard — generación del PDF", () => {
   });
 
   it("falls back to hardcoded rates with warning when /api/rates fails", async () => {
-    fetchMock.mockImplementation((input) => {
-      const url = typeof input === "string" ? input : input.url;
-      if (url.includes("/api/rates")) {
-        return Promise.resolve({
-          ok: false,
-          json: async () => ({ error: "down" }),
-        } as unknown as Response);
-      }
-      return Promise.resolve(pdfResponse());
-    });
+    fetchMock.mockImplementation((input) =>
+      routeTestFetch(input, {
+        rates: () =>
+          Promise.resolve({
+            ok: false,
+            json: async () => ({ error: "down" }),
+          } as unknown as Response),
+      }),
+    );
     render(<CotizadorWizard />);
     await waitForRatesReady();
     expect(screen.getByText(/TC ARS\/USD .*fallback/)).toBeInTheDocument();
@@ -420,6 +452,37 @@ describe("CotizadorWizard — campos vuelo/hotel prefill", () => {
     expect(
       screen.getByLabelText("Vuelo vuelta adulto (ARS)"),
     ).toBeInTheDocument();
+  });
+
+  it("hides flight controls when cliente aporta vuelos is checked", async () => {
+    const user = userEvent.setup();
+    render(<CotizadorWizard />);
+    await waitForRatesReady();
+
+    expect(screen.getByText("Vuelo ida (opcional)")).toBeInTheDocument();
+    expect(screen.getByLabelText("Aerolínea (opcional)")).toBeInTheDocument();
+    expect(
+      screen.getByText("Prefill desde imagen de vuelo"),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByLabelText("Cliente aporta vuelos propios"));
+
+    expect(screen.queryByText("Vuelo ida (opcional)")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Vuelo vuelta (opcional)"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Aerolínea (opcional)"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Vuelo ida adulto (ARS)"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Prefill desde imagen de vuelo"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Cliente aporta vuelos propios"),
+    ).toBeChecked();
   });
 
   it("keeps flight prices on step 0 and starts Costos with hotel fields", async () => {
@@ -536,17 +599,14 @@ describe("CotizadorWizard — AI flight image prefill", () => {
   });
 
   it("on upload calls extract with tipo=vuelo and prefills flight fields", async () => {
-    fetchMock.mockImplementation((input) => {
-      const url = typeof input === "string" ? input : input.url;
-      if (url.includes("/api/rates")) {
-        return Promise.resolve(ratesResponse());
-      }
-      if (url.includes("/api/extract-quote-image")) {
-        return Promise.resolve(vueloExtractResponse());
-      }
-      return Promise.resolve(pdfResponse());
-    });
-
+    fetchMock.mockImplementation((input) =>
+      routeTestFetch(input, {
+        other: (url) =>
+          url.includes("/api/extract-quote-image")
+            ? Promise.resolve(vueloExtractResponse())
+            : null,
+      }),
+    );
     const user = userEvent.setup();
     render(<CotizadorWizard />);
     await waitForRatesReady();
@@ -603,22 +663,20 @@ describe("CotizadorWizard — AI flight image prefill", () => {
   });
 
   it("shows readable API errors", async () => {
-    fetchMock.mockImplementation((input) => {
-      const url = typeof input === "string" ? input : input.url;
-      if (url.includes("/api/rates")) {
-        return Promise.resolve(ratesResponse());
-      }
-      if (url.includes("/api/extract-quote-image")) {
-        return Promise.resolve({
-          ok: false,
-          json: async () => ({
-            error: "La imagen no es legible. Probá con otra captura más clara.",
-          }),
-        } as unknown as Response);
-      }
-      return Promise.resolve(pdfResponse());
-    });
-
+    fetchMock.mockImplementation((input) =>
+      routeTestFetch(input, {
+        other: (url) =>
+          url.includes("/api/extract-quote-image")
+            ? Promise.resolve({
+                ok: false,
+                json: async () => ({
+                  error:
+                    "La imagen no es legible. Probá con otra captura más clara.",
+                }),
+              } as unknown as Response)
+            : null,
+      }),
+    );
     const user = userEvent.setup();
     render(<CotizadorWizard />);
     await waitForRatesReady();
@@ -699,17 +757,14 @@ describe("CotizadorWizard — AI hotel image prefill", () => {
   });
 
   it("calls extract with tipo=hotel and paxAdultos, prefills only that destino", async () => {
-    fetchMock.mockImplementation((input) => {
-      const url = typeof input === "string" ? input : input.url;
-      if (url.includes("/api/rates")) {
-        return Promise.resolve(ratesResponse());
-      }
-      if (url.includes("/api/extract-quote-image")) {
-        return Promise.resolve(hotelExtractResponse());
-      }
-      return Promise.resolve(pdfResponse());
-    });
-
+    fetchMock.mockImplementation((input) =>
+      routeTestFetch(input, {
+        other: (url) =>
+          url.includes("/api/extract-quote-image")
+            ? Promise.resolve(hotelExtractResponse())
+            : null,
+      }),
+    );
     const user = userEvent.setup();
     render(<CotizadorWizard />);
     await waitForRatesReady();
@@ -771,21 +826,20 @@ describe("CotizadorWizard — AI hotel image prefill", () => {
   });
 
   it("shows readable API errors on hotel upload", async () => {
-    fetchMock.mockImplementation((input) => {
-      const url = typeof input === "string" ? input : input.url;
-      if (url.includes("/api/rates")) {
-        return Promise.resolve(ratesResponse());
-      }
-      if (url.includes("/api/extract-quote-image")) {
-        return Promise.resolve({
-          ok: false,
-          json: async () => ({
-            error: "La imagen no es legible. Probá con otra captura más clara.",
-          }),
-        } as unknown as Response);
-      }
-      return Promise.resolve(pdfResponse());
-    });
+    fetchMock.mockImplementation((input) =>
+      routeTestFetch(input, {
+        other: (url) =>
+          url.includes("/api/extract-quote-image")
+            ? Promise.resolve({
+                ok: false,
+                json: async () => ({
+                  error:
+                    "La imagen no es legible. Probá con otra captura más clara.",
+                }),
+              } as unknown as Response)
+            : null,
+      }),
+    );
 
     const user = userEvent.setup();
     render(<CotizadorWizard />);
@@ -802,5 +856,66 @@ describe("CotizadorWizard — AI hotel image prefill", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       /no es legible/i,
     );
+  });
+});
+
+describe("CotizadorWizard — catalog excursions API", () => {
+  it("fetches excursiones on Costos step and shows loading then list", async () => {
+    const sample = {
+      id: "exc-1",
+      nombre: "Cataratas Argentino",
+      nombreLimpio: "Cataratas Argentino",
+      activa: true,
+      destino: "Iguazú",
+      moneda: "USD",
+      neto: 50,
+      precioMenor: null,
+      politicaMenores: "Mismo adulto",
+      proveedor: "Test",
+      observaciones: "",
+      notas: "",
+      tipo: "Regular",
+      validezDesde: null,
+      validezHasta: null,
+      categoriaPaquete: "",
+    };
+
+    let resolveCatalog: ((response: Response) => void) | undefined;
+    fetchMock.mockImplementation((input) =>
+      routeTestFetch(input, {
+        catalog: () =>
+          new Promise<Response>((resolve) => {
+            resolveCatalog = resolve;
+          }),
+      }),
+    );
+
+    const user = userEvent.setup();
+    render(<CotizadorWizard />);
+    await waitForRatesReady();
+    await fillStep0(user);
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+
+    expect(
+      await screen.findByText(/Cargando excursiones/i),
+    ).toBeInTheDocument();
+    expect(catalogCalls().length).toBeGreaterThan(0);
+    expect(String(catalogCalls()[0]?.[0])).toContain(
+      "/api/catalog/excursiones?",
+    );
+    expect(String(catalogCalls()[0]?.[0])).toContain("destino=Misiones");
+    expect(String(catalogCalls()[0]?.[0])).toContain("fechaIda=2026-08-10");
+
+    await act(async () => {
+      resolveCatalog?.(catalogExcursionesResponse([sample]));
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.queryByText(/Cargando excursiones/i),
+      ).not.toBeInTheDocument();
+    });
+    expect(screen.getByText("Cataratas Argentino")).toBeInTheDocument();
+    expect(screen.getByText(/Excursiones \(1 vigentes\)/)).toBeInTheDocument();
   });
 });

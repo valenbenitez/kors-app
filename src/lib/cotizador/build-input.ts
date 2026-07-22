@@ -57,20 +57,23 @@ export function resolveExcursions(ids: string[]): ExcursionInput[] {
 /**
  * Builds formula input from the wizard form using the provided FX rates.
  * Sets `tcArsUsd` from `rates.ARS` so the formula and conversion stay aligned.
+ * When `clienteAportaVuelos` is true, flight prices are forced to 0 so residual
+ * form values cannot inflate the package total.
  */
 export function formToFormulaInput(
   form: CotizacionFormInput,
   rates: FxRatesMap,
 ): CotizacionInput {
+  const zeroFlights = form.clienteAportaVuelos;
   const destinos: DestinoCostInput[] = form.destinos.map((d) => {
     const toArs = (amount: number) => amountToArs(amount, d.moneda, rates);
 
     return {
       destino: d.destino,
-      vueloIdaAdultoArs: toArs(d.vueloIdaAdultoArs),
-      vueloIdaMenorArs: toArs(d.vueloIdaMenorArs),
-      vueloVueltaAdultoArs: toArs(d.vueloVueltaAdultoArs),
-      vueloVueltaMenorArs: toArs(d.vueloVueltaMenorArs),
+      vueloIdaAdultoArs: zeroFlights ? 0 : toArs(d.vueloIdaAdultoArs),
+      vueloIdaMenorArs: zeroFlights ? 0 : toArs(d.vueloIdaMenorArs),
+      vueloVueltaAdultoArs: zeroFlights ? 0 : toArs(d.vueloVueltaAdultoArs),
+      vueloVueltaMenorArs: zeroFlights ? 0 : toArs(d.vueloVueltaMenorArs),
       hotelNoches: d.hotelNoches,
       hotelAdultoNocheArs: toArs(d.hotelAdultoNocheArs),
       hotelMenorNocheArs: toArs(d.hotelMenorNocheArs),

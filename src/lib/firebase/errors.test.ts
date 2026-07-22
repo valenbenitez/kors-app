@@ -80,6 +80,7 @@ describe("parseTripQuoteDoc", () => {
     edadesMenores: [] as number[],
     metodoPago: "tarjeta" as const,
     equipaje: "carry-on" as const,
+    clienteAportaVuelos: false,
     aerolinea: "JetSMART",
     vueloIdaFecha: "",
     vueloIdaHoraSalida: "",

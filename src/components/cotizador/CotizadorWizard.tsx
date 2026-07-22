@@ -2,7 +2,7 @@
 
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { Loader2 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   type Resolver,
   useFieldArray,
@@ -15,8 +15,12 @@ import { PdfPreview } from "@/components/pdf/PdfPreview";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { excursionesResponseSchema } from "@/lib/catalog/schemas";
 import { formToFormulaInput } from "@/lib/cotizador/build-input";
-import type { CatalogExcursion } from "@/lib/cotizador/catalog";
+import {
+  type CatalogExcursion,
+  normalizeSearchText,
+} from "@/lib/cotizador/catalog";
 import { countNights } from "@/lib/cotizador/format";
 import {
   calcularCotizacion,
@@ -24,11 +28,7 @@ import {
   type FormulaResult,
 } from "@/lib/cotizador/formula";
 import { generateItinerary } from "@/lib/cotizador/itinerary";
-import {
-  DESTINO_OPTIONS,
-  type DestinoOption,
-  excursionsForSelection,
-} from "@/lib/cotizador/provinces";
+import { DESTINO_OPTIONS, type DestinoOption } from "@/lib/cotizador/provinces";
 import {
   convertCatalogAmountToForm,
   type FxRatesMap,
@@ -105,6 +105,20 @@ function moneyDec(n: number) {
   }).format(n);
 }
 
+/** Client-side name filter over an already-fetched excursion list. */
+function filterExcursionsByName(
+  items: CatalogExcursion[],
+  query: string,
+): CatalogExcursion[] {
+  const normalizedQuery = normalizeSearchText(query);
+  if (!normalizedQuery) return items;
+  return items.filter(
+    (exc) =>
+      normalizeSearchText(exc.nombre).includes(normalizedQuery) ||
+      normalizeSearchText(exc.nombreLimpio).includes(normalizedQuery),
+  );
+}
+
 export function CotizadorWizard() {
   const [step, setStep] = useState(0);
   const [serverError, setServerError] = useState<string | null>(null);
@@ -128,6 +142,11 @@ export function CotizadorWizard() {
   const [excursionQueries, setExcursionQueries] = useState<
     Record<string, string>
   >({});
+  /** Excursions loaded from GET /api/catalog/excursiones (keyed by form destino). */
+  const [excursionsByDestino, setExcursionsByDestino] = useState<
+    Record<string, CatalogExcursion[]>
+  >({});
+  const [excursionsLoading, setExcursionsLoading] = useState(false);
   // Guard reentrante: garantiza como máximo una petición activa aunque
   // lleguen submits concurrentes (doble click / doble Enter) antes del rerender.
   const isGeneratingRef = useRef(false);
@@ -214,6 +233,8 @@ export function CotizadorWizard() {
   const fechaIda = useWatch({ control, name: "fechaIda" }) ?? "";
   const fechaVuelta = useWatch({ control, name: "fechaVuelta" }) ?? "";
   const destinosWatch = useWatch({ control, name: "destinos" }) ?? [];
+  const clienteAportaVuelos =
+    useWatch({ control, name: "clienteAportaVuelos" }) ?? false;
 
   // Keep segment flight dates in sync with trip-level dates (PDF reads segment fechas).
   useEffect(() => {
@@ -246,15 +267,61 @@ export function CotizadorWizard() {
     });
   }, [fechaIda, fechaVuelta, getValues, setValue]);
 
-  const excursionsByDestino = useMemo(() => {
-    const map: Record<string, CatalogExcursion[]> = {};
-    for (const d of destinosSeleccionados) {
-      map[d] = fechaIda
-        ? excursionsForSelection({ selection: d, fechaIda })
-        : [];
+  // Load excursions from the catalog API on Costos step when destino / fecha change.
+  // Selected excursionIds are kept even if an id drops out of the refreshed list.
+  useEffect(() => {
+    if (step !== 1) return;
+
+    if (!fechaIda || destinosSeleccionados.length === 0) {
+      setExcursionsByDestino({});
+      setExcursionsLoading(false);
+      return;
     }
-    return map;
-  }, [destinosSeleccionados, fechaIda]);
+
+    let cancelled = false;
+
+    async function loadExcursions() {
+      setExcursionsLoading(true);
+      try {
+        const entries = await Promise.all(
+          destinosSeleccionados.map(async (destino) => {
+            const params = new URLSearchParams({
+              destino,
+              fechaIda,
+            });
+            const res = await fetch(
+              `/api/catalog/excursiones?${params.toString()}`,
+            );
+            if (!res.ok) {
+              throw new Error(`Catalog HTTP ${res.status}`);
+            }
+            const raw: unknown = await res.json();
+            const parsed = excursionesResponseSchema.safeParse(raw);
+            if (!parsed.success) {
+              throw new Error("Invalid excursiones payload");
+            }
+            return [destino, parsed.data.items] as const;
+          }),
+        );
+        if (!cancelled) {
+          setExcursionsByDestino(Object.fromEntries(entries));
+        }
+      } catch {
+        if (!cancelled) {
+          setExcursionsByDestino({});
+        }
+      } finally {
+        if (!cancelled) {
+          setExcursionsLoading(false);
+        }
+      }
+    }
+
+    void loadExcursions();
+    return () => {
+      cancelled = true;
+    };
+  }, [step, destinosSeleccionados, fechaIda]);
 
   function syncDestinos(selected: DestinoOption[]) {
     const current = getValues("destinos");
@@ -655,247 +722,277 @@ export function CotizadorWizard() {
                   ))}
                 </select>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="aerolinea">Aerolínea (opcional)</Label>
-                <Input
-                  id="aerolinea"
-                  className={prefillClass("aerolinea")}
-                  {...register("aerolinea")}
+              <div className="flex items-center gap-2 sm:col-span-2">
+                <input
+                  id="clienteAportaVuelos"
+                  type="checkbox"
+                  className="size-4 rounded border-border"
+                  {...register("clienteAportaVuelos")}
                 />
+                <Label htmlFor="clienteAportaVuelos">
+                  Cliente aporta vuelos propios
+                </Label>
               </div>
             </div>
 
-            <ImagePrefillUpload
-              tipo="vuelo"
-              setValue={setValue}
-              getValues={getValues}
-              onPrefill={setPrefilledFlightPaths}
-            />
-
-            <div className="space-y-4 rounded-2xl border border-border p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-sm font-semibold">Vuelo ida (opcional)</h3>
-                <div className="inline-flex flex-wrap justify-end gap-0.5 rounded-full border border-border p-0.5">
-                  {MONEDAS.map((m) => (
-                    <button
-                      key={m}
-                      type="button"
-                      disabled={!hasFlightDestino}
-                      onClick={() => setFlightMoneda(m)}
-                      className={`rounded-full px-2.5 py-1 text-xs font-medium transition ${
-                        flightMoneda === m
-                          ? "bg-primary text-primary-foreground"
-                          : "text-muted-foreground hover:text-foreground"
-                      } disabled:cursor-not-allowed disabled:opacity-50`}
-                    >
-                      {m}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                <div className="flex min-w-0 flex-col space-y-2">
-                  <Label htmlFor="vueloIdaHoraSalida">Hora salida</Label>
-                  <Input
-                    id="vueloIdaHoraSalida"
-                    type="time"
-                    className={prefillClass("vueloIdaHoraSalida")}
-                    {...register("vueloIdaHoraSalida")}
-                  />
-                </div>
-                <div className="flex min-w-0 flex-col space-y-2">
-                  <Label htmlFor="vueloIdaHoraLlegada">Hora llegada</Label>
-                  <Input
-                    id="vueloIdaHoraLlegada"
-                    type="time"
-                    className={prefillClass("vueloIdaHoraLlegada")}
-                    {...register("vueloIdaHoraLlegada")}
-                  />
-                </div>
-                <div className="flex min-w-0 flex-col space-y-2">
-                  <Label htmlFor="vueloIdaNumero">Número de vuelo ida</Label>
-                  <Input
-                    id="vueloIdaNumero"
-                    placeholder="ej. 3150"
-                    className={prefillClass("vueloIdaNumero")}
-                    {...register("vueloIdaNumero")}
-                  />
-                </div>
-                <div className="flex min-w-0 flex-col space-y-2">
-                  <Label htmlFor="vueloIdaAeropuertoSalida">
-                    Aeropuerto salida ida (IATA)
-                  </Label>
-                  <Input
-                    id="vueloIdaAeropuertoSalida"
-                    placeholder="EZE"
-                    maxLength={3}
-                    className={cn(
-                      "uppercase",
-                      prefillClass("vueloIdaAeropuertoSalida"),
-                    )}
-                    {...register("vueloIdaAeropuertoSalida")}
-                  />
-                </div>
-                <div className="flex min-w-0 flex-col space-y-2">
-                  <Label htmlFor="vueloIdaAeropuertoLlegada">
-                    Aeropuerto llegada ida (IATA)
-                  </Label>
-                  <Input
-                    id="vueloIdaAeropuertoLlegada"
-                    placeholder="IGR"
-                    maxLength={3}
-                    className={cn(
-                      "uppercase",
-                      prefillClass("vueloIdaAeropuertoLlegada"),
-                    )}
-                    {...register("vueloIdaAeropuertoLlegada")}
-                  />
-                </div>
-              </div>
-              {!hasFlightDestino ? (
-                <p className="text-sm text-muted-foreground">
-                  Seleccioná un destino para cargar precios de vuelo.
-                </p>
-              ) : null}
-              <div className="grid gap-3 sm:grid-cols-2">
+            {!clienteAportaVuelos ? (
+              <>
                 <div className="space-y-2">
-                  <Label htmlFor="vueloIdaAdultoArs">
-                    {flightCur("Vuelo ida adulto")}
-                  </Label>
-                  <MoneyField
-                    id="vueloIdaAdultoArs"
-                    currency={flightMoneda}
-                    disabled={!hasFlightDestino}
-                    className={prefillClass("destinos.0.vueloIdaAdultoArs")}
-                    value={destinosWatch[0]?.vueloIdaAdultoArs ?? 0}
-                    onValueChange={(v) =>
-                      setValue("destinos.0.vueloIdaAdultoArs", v)
-                    }
+                  <Label htmlFor="aerolinea">Aerolínea (opcional)</Label>
+                  <Input
+                    id="aerolinea"
+                    className={prefillClass("aerolinea")}
+                    {...register("aerolinea")}
                   />
                 </div>
-                {hasMenoresStep0 ? (
-                  <div className="space-y-2">
-                    <Label htmlFor="vueloIdaMenorArs">
-                      {flightCur("Vuelo ida menor")}
-                    </Label>
-                    <MoneyField
-                      id="vueloIdaMenorArs"
-                      currency={flightMoneda}
-                      disabled={!hasFlightDestino}
-                      className={prefillClass("destinos.0.vueloIdaMenorArs")}
-                      value={destinosWatch[0]?.vueloIdaMenorArs ?? 0}
-                      onValueChange={(v) =>
-                        setValue("destinos.0.vueloIdaMenorArs", v)
-                      }
-                    />
-                  </div>
-                ) : null}
-              </div>
-            </div>
 
-            <div className="space-y-4 rounded-2xl border border-border p-4">
-              <h3 className="text-sm font-semibold">Vuelo vuelta (opcional)</h3>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                <div className="flex min-w-0 flex-col space-y-2">
-                  <Label htmlFor="vueloVueltaHoraSalida">Hora salida</Label>
-                  <Input
-                    id="vueloVueltaHoraSalida"
-                    type="time"
-                    className={prefillClass("vueloVueltaHoraSalida")}
-                    {...register("vueloVueltaHoraSalida")}
-                  />
-                </div>
-                <div className="flex min-w-0 flex-col space-y-2">
-                  <Label htmlFor="vueloVueltaHoraLlegada">Hora llegada</Label>
-                  <Input
-                    id="vueloVueltaHoraLlegada"
-                    type="time"
-                    className={prefillClass("vueloVueltaHoraLlegada")}
-                    {...register("vueloVueltaHoraLlegada")}
-                  />
-                </div>
-                <div className="flex min-w-0 flex-col space-y-2">
-                  <Label htmlFor="vueloVueltaNumero">
-                    Número de vuelo vuelta
-                  </Label>
-                  <Input
-                    id="vueloVueltaNumero"
-                    placeholder="ej. 3151"
-                    className={prefillClass("vueloVueltaNumero")}
-                    {...register("vueloVueltaNumero")}
-                  />
-                </div>
-                <div className="flex min-w-0 flex-col space-y-2">
-                  <Label htmlFor="vueloVueltaAeropuertoSalida">
-                    Aeropuerto salida vuelta (IATA)
-                  </Label>
-                  <Input
-                    id="vueloVueltaAeropuertoSalida"
-                    placeholder="IGR"
-                    maxLength={3}
-                    className={cn(
-                      "uppercase",
-                      prefillClass("vueloVueltaAeropuertoSalida"),
-                    )}
-                    {...register("vueloVueltaAeropuertoSalida")}
-                  />
-                </div>
-                <div className="flex min-w-0 flex-col space-y-2">
-                  <Label htmlFor="vueloVueltaAeropuertoLlegada">
-                    Aeropuerto llegada vuelta (IATA)
-                  </Label>
-                  <Input
-                    id="vueloVueltaAeropuertoLlegada"
-                    placeholder="EZE"
-                    maxLength={3}
-                    className={cn(
-                      "uppercase",
-                      prefillClass("vueloVueltaAeropuertoLlegada"),
-                    )}
-                    {...register("vueloVueltaAeropuertoLlegada")}
-                  />
-                </div>
-              </div>
-              {!hasFlightDestino ? (
-                <p className="text-sm text-muted-foreground">
-                  Seleccioná un destino para cargar precios de vuelo.
-                </p>
-              ) : null}
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="vueloVueltaAdultoArs">
-                    {flightCur("Vuelo vuelta adulto")}
-                  </Label>
-                  <MoneyField
-                    id="vueloVueltaAdultoArs"
-                    currency={flightMoneda}
-                    disabled={!hasFlightDestino}
-                    className={prefillClass("destinos.0.vueloVueltaAdultoArs")}
-                    value={destinosWatch[0]?.vueloVueltaAdultoArs ?? 0}
-                    onValueChange={(v) =>
-                      setValue("destinos.0.vueloVueltaAdultoArs", v)
-                    }
-                  />
-                </div>
-                {hasMenoresStep0 ? (
-                  <div className="space-y-2">
-                    <Label htmlFor="vueloVueltaMenorArs">
-                      {flightCur("Vuelo vuelta menor")}
-                    </Label>
-                    <MoneyField
-                      id="vueloVueltaMenorArs"
-                      currency={flightMoneda}
-                      disabled={!hasFlightDestino}
-                      className={prefillClass("destinos.0.vueloVueltaMenorArs")}
-                      value={destinosWatch[0]?.vueloVueltaMenorArs ?? 0}
-                      onValueChange={(v) =>
-                        setValue("destinos.0.vueloVueltaMenorArs", v)
-                      }
-                    />
+                <ImagePrefillUpload
+                  tipo="vuelo"
+                  setValue={setValue}
+                  getValues={getValues}
+                  onPrefill={setPrefilledFlightPaths}
+                />
+
+                <div className="space-y-4 rounded-2xl border border-border p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="text-sm font-semibold">
+                      Vuelo ida (opcional)
+                    </h3>
+                    <div className="inline-flex flex-wrap justify-end gap-0.5 rounded-full border border-border p-0.5">
+                      {MONEDAS.map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          disabled={!hasFlightDestino}
+                          onClick={() => setFlightMoneda(m)}
+                          className={`rounded-full px-2.5 py-1 text-xs font-medium transition ${
+                            flightMoneda === m
+                              ? "bg-primary text-primary-foreground"
+                              : "text-muted-foreground hover:text-foreground"
+                          } disabled:cursor-not-allowed disabled:opacity-50`}
+                        >
+                          {m}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                ) : null}
-              </div>
-            </div>
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="flex min-w-0 flex-col space-y-2">
+                      <Label htmlFor="vueloIdaHoraSalida">Hora salida</Label>
+                      <Input
+                        id="vueloIdaHoraSalida"
+                        type="time"
+                        className={prefillClass("vueloIdaHoraSalida")}
+                        {...register("vueloIdaHoraSalida")}
+                      />
+                    </div>
+                    <div className="flex min-w-0 flex-col space-y-2">
+                      <Label htmlFor="vueloIdaHoraLlegada">Hora llegada</Label>
+                      <Input
+                        id="vueloIdaHoraLlegada"
+                        type="time"
+                        className={prefillClass("vueloIdaHoraLlegada")}
+                        {...register("vueloIdaHoraLlegada")}
+                      />
+                    </div>
+                    <div className="flex min-w-0 flex-col space-y-2">
+                      <Label htmlFor="vueloIdaNumero">
+                        Número de vuelo ida
+                      </Label>
+                      <Input
+                        id="vueloIdaNumero"
+                        placeholder="ej. 3150"
+                        className={prefillClass("vueloIdaNumero")}
+                        {...register("vueloIdaNumero")}
+                      />
+                    </div>
+                    <div className="flex min-w-0 flex-col space-y-2">
+                      <Label htmlFor="vueloIdaAeropuertoSalida">
+                        Aeropuerto salida ida (IATA)
+                      </Label>
+                      <Input
+                        id="vueloIdaAeropuertoSalida"
+                        placeholder="EZE"
+                        maxLength={3}
+                        className={cn(
+                          "uppercase",
+                          prefillClass("vueloIdaAeropuertoSalida"),
+                        )}
+                        {...register("vueloIdaAeropuertoSalida")}
+                      />
+                    </div>
+                    <div className="flex min-w-0 flex-col space-y-2">
+                      <Label htmlFor="vueloIdaAeropuertoLlegada">
+                        Aeropuerto llegada ida (IATA)
+                      </Label>
+                      <Input
+                        id="vueloIdaAeropuertoLlegada"
+                        placeholder="IGR"
+                        maxLength={3}
+                        className={cn(
+                          "uppercase",
+                          prefillClass("vueloIdaAeropuertoLlegada"),
+                        )}
+                        {...register("vueloIdaAeropuertoLlegada")}
+                      />
+                    </div>
+                  </div>
+                  {!hasFlightDestino ? (
+                    <p className="text-sm text-muted-foreground">
+                      Seleccioná un destino para cargar precios de vuelo.
+                    </p>
+                  ) : null}
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="vueloIdaAdultoArs">
+                        {flightCur("Vuelo ida adulto")}
+                      </Label>
+                      <MoneyField
+                        id="vueloIdaAdultoArs"
+                        currency={flightMoneda}
+                        disabled={!hasFlightDestino}
+                        className={prefillClass("destinos.0.vueloIdaAdultoArs")}
+                        value={destinosWatch[0]?.vueloIdaAdultoArs ?? 0}
+                        onValueChange={(v) =>
+                          setValue("destinos.0.vueloIdaAdultoArs", v)
+                        }
+                      />
+                    </div>
+                    {hasMenoresStep0 ? (
+                      <div className="space-y-2">
+                        <Label htmlFor="vueloIdaMenorArs">
+                          {flightCur("Vuelo ida menor")}
+                        </Label>
+                        <MoneyField
+                          id="vueloIdaMenorArs"
+                          currency={flightMoneda}
+                          disabled={!hasFlightDestino}
+                          className={prefillClass(
+                            "destinos.0.vueloIdaMenorArs",
+                          )}
+                          value={destinosWatch[0]?.vueloIdaMenorArs ?? 0}
+                          onValueChange={(v) =>
+                            setValue("destinos.0.vueloIdaMenorArs", v)
+                          }
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="space-y-4 rounded-2xl border border-border p-4">
+                  <h3 className="text-sm font-semibold">
+                    Vuelo vuelta (opcional)
+                  </h3>
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="flex min-w-0 flex-col space-y-2">
+                      <Label htmlFor="vueloVueltaHoraSalida">Hora salida</Label>
+                      <Input
+                        id="vueloVueltaHoraSalida"
+                        type="time"
+                        className={prefillClass("vueloVueltaHoraSalida")}
+                        {...register("vueloVueltaHoraSalida")}
+                      />
+                    </div>
+                    <div className="flex min-w-0 flex-col space-y-2">
+                      <Label htmlFor="vueloVueltaHoraLlegada">
+                        Hora llegada
+                      </Label>
+                      <Input
+                        id="vueloVueltaHoraLlegada"
+                        type="time"
+                        className={prefillClass("vueloVueltaHoraLlegada")}
+                        {...register("vueloVueltaHoraLlegada")}
+                      />
+                    </div>
+                    <div className="flex min-w-0 flex-col space-y-2">
+                      <Label htmlFor="vueloVueltaNumero">
+                        Número de vuelo vuelta
+                      </Label>
+                      <Input
+                        id="vueloVueltaNumero"
+                        placeholder="ej. 3151"
+                        className={prefillClass("vueloVueltaNumero")}
+                        {...register("vueloVueltaNumero")}
+                      />
+                    </div>
+                    <div className="flex min-w-0 flex-col space-y-2">
+                      <Label htmlFor="vueloVueltaAeropuertoSalida">
+                        Aeropuerto salida vuelta (IATA)
+                      </Label>
+                      <Input
+                        id="vueloVueltaAeropuertoSalida"
+                        placeholder="IGR"
+                        maxLength={3}
+                        className={cn(
+                          "uppercase",
+                          prefillClass("vueloVueltaAeropuertoSalida"),
+                        )}
+                        {...register("vueloVueltaAeropuertoSalida")}
+                      />
+                    </div>
+                    <div className="flex min-w-0 flex-col space-y-2">
+                      <Label htmlFor="vueloVueltaAeropuertoLlegada">
+                        Aeropuerto llegada vuelta (IATA)
+                      </Label>
+                      <Input
+                        id="vueloVueltaAeropuertoLlegada"
+                        placeholder="EZE"
+                        maxLength={3}
+                        className={cn(
+                          "uppercase",
+                          prefillClass("vueloVueltaAeropuertoLlegada"),
+                        )}
+                        {...register("vueloVueltaAeropuertoLlegada")}
+                      />
+                    </div>
+                  </div>
+                  {!hasFlightDestino ? (
+                    <p className="text-sm text-muted-foreground">
+                      Seleccioná un destino para cargar precios de vuelo.
+                    </p>
+                  ) : null}
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="vueloVueltaAdultoArs">
+                        {flightCur("Vuelo vuelta adulto")}
+                      </Label>
+                      <MoneyField
+                        id="vueloVueltaAdultoArs"
+                        currency={flightMoneda}
+                        disabled={!hasFlightDestino}
+                        className={prefillClass(
+                          "destinos.0.vueloVueltaAdultoArs",
+                        )}
+                        value={destinosWatch[0]?.vueloVueltaAdultoArs ?? 0}
+                        onValueChange={(v) =>
+                          setValue("destinos.0.vueloVueltaAdultoArs", v)
+                        }
+                      />
+                    </div>
+                    {hasMenoresStep0 ? (
+                      <div className="space-y-2">
+                        <Label htmlFor="vueloVueltaMenorArs">
+                          {flightCur("Vuelo vuelta menor")}
+                        </Label>
+                        <MoneyField
+                          id="vueloVueltaMenorArs"
+                          currency={flightMoneda}
+                          disabled={!hasFlightDestino}
+                          className={prefillClass(
+                            "destinos.0.vueloVueltaMenorArs",
+                          )}
+                          value={destinosWatch[0]?.vueloVueltaMenorArs ?? 0}
+                          onValueChange={(v) =>
+                            setValue("destinos.0.vueloVueltaMenorArs", v)
+                          }
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              </>
+            ) : null}
 
             <div className="space-y-2">
               <Label>Destinos</Label>
@@ -936,14 +1033,7 @@ export function CotizadorWizard() {
               const options = excursionsByDestino[destino] ?? [];
               const query = excursionQueries[destino] ?? "";
               // Selected ids stay in form even when hidden by the name filter.
-              const visibleOptions =
-                fechaIda && query.trim()
-                  ? excursionsForSelection({
-                      selection: destino,
-                      fechaIda,
-                      query,
-                    })
-                  : options;
+              const visibleOptions = filterExcursionsByName(options, query);
               const selectedIds = destinosWatch[index]?.excursionIds ?? [];
               const moneda = destinosWatch[index]?.moneda ?? "ARS";
               const fx = rates ?? fallbackFxRates();
@@ -1148,6 +1238,11 @@ export function CotizadorWizard() {
                     {!fechaIda ? (
                       <p className="text-sm text-muted-foreground">
                         Definí la fecha de ida para filtrar por vigencia.
+                      </p>
+                    ) : excursionsLoading ? (
+                      <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Loader2 className="size-4 animate-spin" aria-hidden />
+                        Cargando excursiones…
                       </p>
                     ) : options.length === 0 ? (
                       <p className="text-sm text-muted-foreground">

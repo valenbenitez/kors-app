@@ -150,3 +150,79 @@ export async function getTripQuoteById(id: string): Promise<TripQuoteDoc> {
     mapFirebaseError(error, "getTripQuoteById");
   }
 }
+
+/** Loads a trip quote by cot number (e.g. COT-0010). */
+export async function getTripQuoteByCotNumber(
+  cotNumber: string,
+): Promise<TripQuoteDoc> {
+  try {
+    const snap = await getAdminFirestore()
+      .collection(TRIP_QUOTES)
+      .where("cotNumber", "==", cotNumber)
+      .limit(1)
+      .get();
+
+    if (snap.empty) {
+      throw new TripQuoteNotFoundError(cotNumber);
+    }
+
+    const doc = snap.docs[0];
+    if (!doc) {
+      throw new TripQuoteNotFoundError(cotNumber);
+    }
+
+    return parseTripQuoteDoc(doc.id, doc.data() as Record<string, unknown>);
+  } catch (error) {
+    mapFirebaseError(error, "getTripQuoteByCotNumber");
+  }
+}
+
+function sortByCreatedAtDesc(docs: TripQuoteDoc[]): TripQuoteDoc[] {
+  return docs.toSorted((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+}
+
+/**
+ * Lists trip quotes created by a given user uid (newest first).
+ * Sorted in memory to avoid a composite Firestore index on createdBy.uid + createdAt.
+ */
+export async function listTripQuotesForUser(
+  uid: string,
+  options: { limit?: number } = {},
+): Promise<TripQuoteDoc[]> {
+  const limit = options.limit ?? 50;
+  try {
+    const snap = await getAdminFirestore()
+      .collection(TRIP_QUOTES)
+      .where("createdBy.uid", "==", uid)
+      .get();
+
+    const docs = snap.docs.map((doc) =>
+      parseTripQuoteDoc(doc.id, doc.data() as Record<string, unknown>),
+    );
+    return sortByCreatedAtDesc(docs).slice(0, limit);
+  } catch (error) {
+    mapFirebaseError(error, "listTripQuotesForUser");
+  }
+}
+
+/**
+ * Lists all trip quotes (admin). Newest first via Firestore orderBy.
+ */
+export async function listTripQuotesAll(
+  options: { limit?: number } = {},
+): Promise<TripQuoteDoc[]> {
+  const limit = options.limit ?? 50;
+  try {
+    const snap = await getAdminFirestore()
+      .collection(TRIP_QUOTES)
+      .orderBy("createdAt", "desc")
+      .limit(limit)
+      .get();
+
+    return snap.docs.map((doc) =>
+      parseTripQuoteDoc(doc.id, doc.data() as Record<string, unknown>),
+    );
+  } catch (error) {
+    mapFirebaseError(error, "listTripQuotesAll");
+  }
+}

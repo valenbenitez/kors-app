@@ -11,10 +11,14 @@ import {
 } from "@/lib/drive";
 import { allocateCotNumber } from "@/lib/firebase/counters/cotizaciones";
 import { FirebaseDomainError } from "@/lib/firebase/errors";
+import { isAdmin } from "@/lib/firebase/trip-quotes/access";
 import {
   createTripQuote,
+  listTripQuotesAll,
+  listTripQuotesForUser,
   updateTripQuoteDriveFields,
 } from "@/lib/firebase/trip-quotes/repository";
+import { toTripQuoteSummary } from "@/lib/firebase/trip-quotes/summary";
 import { ROUNDING_RULE_CEILING_V1 } from "@/lib/firebase/trip-quotes/types";
 import { cotizacionFormSchema } from "@/lib/validations/cotizacion";
 
@@ -29,9 +33,71 @@ export type CotizacionesRouteDeps = {
   updateTripQuoteDriveFields?: typeof updateTripQuoteDriveFields;
 };
 
+export type CotizacionesListDeps = {
+  listTripQuotesForUser?: typeof listTripQuotesForUser;
+  listTripQuotesAll?: typeof listTripQuotesAll;
+};
+
+/** Next.js App Router entry — no DI second arg (context is reserved). */
+export async function GET(request: Request) {
+  return handleCotizacionesGet(request);
+}
+
 /** Next.js App Router entry — no DI second arg (context is reserved). */
 export async function POST(request: Request) {
   return handleCotizacionesPost(request);
+}
+
+/**
+ * GET /api/cotizaciones — list trip quotes for the session user.
+ *
+ * Sellers see only their own quotes; admins see all.
+ * Optional query: `?limit=` (default 50, max 200).
+ * Response: `{ items: TripQuoteSummary[] }`.
+ */
+export async function handleCotizacionesGet(
+  request: Request,
+  deps: CotizacionesListDeps = {},
+) {
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+
+  const url = new URL(request.url);
+  const limitRaw = url.searchParams.get("limit");
+  let limit = 50;
+  if (limitRaw !== null) {
+    const parsed = Number.parseInt(limitRaw, 10);
+    if (!Number.isFinite(parsed) || parsed < 1) {
+      return NextResponse.json(
+        { error: "Parámetro limit inválido" },
+        { status: 400 },
+      );
+    }
+    limit = Math.min(parsed, 200);
+  }
+
+  const listOwn = deps.listTripQuotesForUser ?? listTripQuotesForUser;
+  const listAll = deps.listTripQuotesAll ?? listTripQuotesAll;
+
+  try {
+    const docs = isAdmin(session)
+      ? await listAll({ limit })
+      : await listOwn(session.sub, { limit });
+
+    return NextResponse.json(
+      { items: docs.map(toTripQuoteSummary) },
+      { status: 200 },
+    );
+  } catch (error) {
+    console.error("cotizaciones list error", error);
+    const detail =
+      error instanceof FirebaseDomainError
+        ? error.message
+        : "No se pudieron listar las cotizaciones.";
+    return NextResponse.json({ error: detail }, { status: 500 });
+  }
 }
 
 /**

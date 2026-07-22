@@ -33,6 +33,7 @@ function minimalForm(
     edadesMenores: [],
     metodoPago: "efectivo",
     equipaje: "carry-on",
+    clienteAportaVuelos: false,
     aerolinea: "LATAM",
     vueloIdaFecha: "",
     vueloIdaHoraSalida: "",
@@ -71,6 +72,34 @@ describe("amountToUsd / amountToArs", () => {
 
   it("converts USD to ARS with rates.ARS", () => {
     expect(amountToArs(100, "USD", rates)).toBe(100 * rates.ARS);
+  });
+});
+
+describe("formToFormulaInput — clienteAportaVuelos", () => {
+  it("zeros residual flight prices when clienteAportaVuelos is true", () => {
+    const form = minimalForm({
+      clienteAportaVuelos: true,
+      destinos: [
+        {
+          ...emptyDestino("Río Negro"),
+          moneda: "ARS",
+          vueloIdaAdultoArs: 180_000,
+          vueloIdaMenorArs: 90_000,
+          vueloVueltaAdultoArs: 175_000,
+          vueloVueltaMenorArs: 85_000,
+          hotelNoches: 1,
+          hotelAdultoNocheArs: 100_000,
+        },
+      ],
+    });
+
+    const input = formToFormulaInput(form, rates);
+    const dest = input.destinos[0];
+    expect(dest.vueloIdaAdultoArs).toBe(0);
+    expect(dest.vueloIdaMenorArs).toBe(0);
+    expect(dest.vueloVueltaAdultoArs).toBe(0);
+    expect(dest.vueloVueltaMenorArs).toBe(0);
+    expect(dest.hotelAdultoNocheArs).toBe(100_000);
   });
 });
 

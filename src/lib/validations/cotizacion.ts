@@ -99,6 +99,8 @@ export const cotizacionFormSchema = z
     edadesMenores: z.array(z.coerce.number().int().min(0).max(17)),
     metodoPago: z.enum(METODOS_PAGO),
     equipaje: z.enum(EQUIPAJES),
+    /** When true, client provides their own flights — no package flight costs/UI/PDF cards. */
+    clienteAportaVuelos: z.boolean().default(false),
     aerolinea: z.string(),
     vueloIdaFecha: optionalText,
     vueloIdaHoraSalida: optionalText,
@@ -191,6 +193,7 @@ export const defaultCotizacionValues: CotizacionFormInput = {
   edadesMenores: [],
   metodoPago: "tarjeta",
   equipaje: "carry-on",
+  clienteAportaVuelos: false,
   aerolinea: "",
   vueloIdaFecha: "",
   vueloIdaHoraSalida: "",

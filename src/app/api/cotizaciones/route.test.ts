@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 const getSession = vi.fn();
 const safeParse = vi.fn();
@@ -27,17 +27,27 @@ vi.mock("@/lib/cotizador/formula", () => ({
   FormulaError: class FormulaError extends Error {},
 }));
 
-import { handleCotizacionesPost } from "@/app/api/cotizaciones/route";
+import {
+  handleCotizacionesGet,
+  handleCotizacionesPost,
+} from "@/app/api/cotizaciones/route";
 import { FormulaError } from "@/lib/cotizador/formula";
 import type { DriveClient } from "@/lib/drive";
 import { DriveUploadError } from "@/lib/drive";
 import { FirebaseDomainError } from "@/lib/firebase/errors";
+import type { TripQuoteDoc } from "@/lib/firebase/trip-quotes/types";
 
 function jsonRequest(body: unknown = {}): Request {
   return new Request("http://localhost/api/cotizaciones", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+  });
+}
+
+function listRequest(query = ""): Request {
+  return new Request(`http://localhost/api/cotizaciones${query}`, {
+    method: "GET",
   });
 }
 
@@ -73,6 +83,122 @@ function builtPdf(cotNumber: string) {
     generatedAt: "2026-07-21",
   };
 }
+
+function sampleDoc(overrides: Partial<TripQuoteDoc> = {}): TripQuoteDoc {
+  return {
+    id: "doc-1",
+    cotNumber: "COT-0001",
+    status: "generated",
+    createdAt: new Date("2026-07-01T12:00:00.000Z"),
+    updatedAt: new Date("2026-07-01T12:00:00.000Z"),
+    createdBy: { uid: "uid-1", email: "seller@kors.com" },
+    form: formBody as TripQuoteDoc["form"],
+    result: formulaResult as TripQuoteDoc["result"],
+    precioFinalCliente: 150,
+    clienteNombre: "Ana",
+    ...overrides,
+  };
+}
+
+const prevAdminEmails = process.env.ADMIN_EMAILS;
+
+afterEach(() => {
+  if (prevAdminEmails === undefined) {
+    delete process.env.ADMIN_EMAILS;
+  } else {
+    process.env.ADMIN_EMAILS = prevAdminEmails;
+  }
+});
+
+describe("GET /api/cotizaciones", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    delete process.env.ADMIN_EMAILS;
+  });
+
+  test("returns 401 when there is no session", async () => {
+    getSession.mockResolvedValue(null);
+    const listTripQuotesForUser = vi.fn();
+
+    const response = await handleCotizacionesGet(listRequest(), {
+      listTripQuotesForUser,
+    });
+
+    expect(response.status).toBe(401);
+    expect(listTripQuotesForUser).not.toHaveBeenCalled();
+  });
+
+  test("seller lists only own quotes", async () => {
+    getSession.mockResolvedValue({ email: "seller@kors.com", sub: "uid-1" });
+    const listTripQuotesForUser = vi.fn(async () => [sampleDoc()]);
+    const listTripQuotesAll = vi.fn();
+
+    const response = await handleCotizacionesGet(listRequest(), {
+      listTripQuotesForUser,
+      listTripQuotesAll,
+    });
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(listTripQuotesForUser).toHaveBeenCalledExactlyOnceWith("uid-1", {
+      limit: 50,
+    });
+    expect(listTripQuotesAll).not.toHaveBeenCalled();
+    expect(data.items).toEqual([
+      {
+        id: "doc-1",
+        cotNumber: "COT-0001",
+        status: "generated",
+        createdAt: "2026-07-01T12:00:00.000Z",
+        clienteNombre: "Ana",
+        precioFinal: 150,
+        createdBy: { email: "seller@kors.com" },
+      },
+    ]);
+  });
+
+  test("admin lists all quotes via ADMIN_EMAILS", async () => {
+    process.env.ADMIN_EMAILS = "boss@kors.com";
+    getSession.mockResolvedValue({ email: "boss@kors.com", sub: "boss-uid" });
+    const listTripQuotesForUser = vi.fn();
+    const listTripQuotesAll = vi.fn(async () => [
+      sampleDoc(),
+      sampleDoc({
+        id: "doc-2",
+        cotNumber: "COT-0002",
+        createdBy: { uid: "other", email: "other@kors.com" },
+      }),
+    ]);
+
+    const response = await handleCotizacionesGet(listRequest("?limit=10"), {
+      listTripQuotesForUser,
+      listTripQuotesAll,
+    });
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(listTripQuotesAll).toHaveBeenCalledExactlyOnceWith({ limit: 10 });
+    expect(listTripQuotesForUser).not.toHaveBeenCalled();
+    expect(data.items).toHaveLength(2);
+  });
+
+  test("admin lists all via custom claim", async () => {
+    getSession.mockResolvedValue({
+      email: "admin@kors.com",
+      sub: "admin-uid",
+      admin: true,
+    });
+    const listTripQuotesAll = vi.fn(async () => []);
+
+    const response = await handleCotizacionesGet(listRequest(), {
+      listTripQuotesAll,
+      listTripQuotesForUser: vi.fn(),
+    });
+
+    expect(response.status).toBe(200);
+    expect(listTripQuotesAll).toHaveBeenCalledOnce();
+  });
+});
 
 describe("POST /api/cotizaciones", () => {
   beforeEach(() => {
